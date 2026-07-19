@@ -1,6 +1,13 @@
 const vscode = require('vscode');
 const YAML = require('yaml');
 const { getSearchPaths, loadLessons } = require('./lessonLoader');
+const path = require('node:path');
+const {
+  HARNESS_CONFIG,
+  getSkillTarget,
+  installSkillDirectory,
+  pathExists
+} = require('./skillInstaller');
 
 class LessonTreeProvider {
   constructor(getLessons, isComplete, isChapterActive) {
@@ -197,6 +204,151 @@ async function activate(context) {
   backButton.command = 'vibeTour.back';
   backButton.text = '$(arrow-left) Back to lesson step';
   backButton.tooltip = 'Return to the lesson step that opened this related reference';
+
+  const installAuthoringSkill = async () => {
+    const selectedHarnesses = await vscode.window.showQuickPick(
+      [
+        {
+          label: 'Codex / .agents-compatible agents',
+          description: 'Shared project convention: .agents/skills',
+          harness: 'codex',
+          picked: true
+        },
+        {
+          label: 'Claude Code',
+          description: '.claude/skills',
+          harness: 'claude-code',
+          picked: true
+        }
+      ],
+      {
+        canPickMany: true,
+        ignoreFocusOut: true,
+        title: 'Install VibeTour lesson-authoring skill · 1/2',
+        placeHolder: 'Select one or more coding agents'
+      }
+    );
+    if (!selectedHarnesses || selectedHarnesses.length === 0) {
+      return;
+    }
+
+    const remoteDescription = vscode.env.remoteName
+      ? `All projects for this remote host (${vscode.env.remoteName})`
+      : 'All projects for the current OS user';
+    const selectedScope = await vscode.window.showQuickPick(
+      [
+        {
+          label: 'Current workspace (local)',
+          description: 'Install in this project and optionally commit it for the team',
+          scope: 'workspace'
+        },
+        {
+          label: 'User (global)',
+          description: remoteDescription,
+          scope: 'user'
+        }
+      ],
+      {
+        ignoreFocusOut: true,
+        title: 'Install VibeTour lesson-authoring skill · 2/2',
+        placeHolder: 'Choose where the skill should be available'
+      }
+    );
+    if (!selectedScope) {
+      return;
+    }
+
+    let workspaceFolder;
+    if (selectedScope.scope === 'workspace') {
+      const folders = vscode.workspace.workspaceFolders || [];
+      if (folders.length === 0) {
+        vscode.window.showErrorMessage('Open a workspace folder before installing a workspace skill.');
+        return;
+      }
+      workspaceFolder = folders.length === 1
+        ? folders[0]
+        : await vscode.window.showWorkspaceFolderPick({
+          placeHolder: 'Choose the workspace folder that should receive the skill'
+        });
+      if (!workspaceFolder) {
+        return;
+      }
+    }
+
+    const sourceDirectory = path.join(
+      context.extensionPath,
+      '.agents',
+      'skills',
+      'generate-code-lesson'
+    );
+    const installations = selectedHarnesses.map((item) => ({
+      harness: item.harness,
+      label: HARNESS_CONFIG[item.harness].label,
+      targetDirectory: getSkillTarget(item.harness, selectedScope.scope, {
+        workspaceRoot: workspaceFolder?.uri.fsPath
+      })
+    }));
+
+    let existingInstallations;
+    try {
+      existingInstallations = [];
+      for (const installation of installations) {
+        if (await pathExists(installation.targetDirectory)) {
+          existingInstallations.push(installation);
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Unable to inspect skill installations: ${message}`);
+      return;
+    }
+
+    if (existingInstallations.length > 0) {
+      const labels = existingInstallations.map((item) => item.label).join(', ');
+      const choice = await vscode.window.showWarningMessage(
+        `The ${labels} installation already exists. Replace it with the version bundled with VibeTour?`,
+        { modal: true },
+        'Replace'
+      );
+      if (choice !== 'Replace') {
+        return;
+      }
+    }
+
+    const installed = [];
+    const failed = [];
+    for (const installation of installations) {
+      try {
+        await installSkillDirectory(sourceDirectory, installation.targetDirectory, {
+          replace: existingInstallations.includes(installation)
+        });
+        installed.push(installation);
+      } catch (error) {
+        failed.push({
+          ...installation,
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    if (installed.length > 0) {
+      const labels = installed.map((item) => item.label).join(' and ');
+      const location = selectedScope.scope === 'workspace'
+        ? `workspace ${workspaceFolder.name}`
+        : vscode.env.remoteName
+          ? `user account on ${vscode.env.remoteName}`
+          : 'current user account';
+      vscode.window.showInformationMessage(
+        `Installed generate-code-lesson for ${labels} in the ${location}.`
+      );
+    }
+    if (failed.length > 0) {
+      vscode.window.showErrorMessage(
+        `Unable to install for ${failed.map((item) => item.label).join(', ')}: ` +
+        failed.map((item) => item.message).join('; ')
+      );
+    }
+  };
 
   const toRange = (document, location) => {
     const start = Math.max(0, location.startLine - 1);
@@ -487,14 +639,15 @@ async function activate(context) {
   const reloadLessons = async (notify = false) => {
     const result = await loadLessons(diagnostics);
     lessons = result.lessons;
+    await vscode.commands.executeCommand(
+      'setContext',
+      'vibeTour.hasLessonErrors',
+      result.errorCount > 0
+    );
     treeProvider.refresh();
-    treeView.message = lessons.length === 0
-      ? result.errorCount > 0
-        ? `No valid lessons. ${result.errorCount} YAML file(s) have errors.`
-        : 'No lessons found under the configured search paths.'
-      : result.errorCount > 0
-        ? `${result.errorCount} invalid lesson file(s); see Problems.`
-        : undefined;
+    treeView.message = lessons.length > 0 && result.errorCount > 0
+      ? `${result.errorCount} invalid lesson file(s); see Problems.`
+      : undefined;
 
     const activeChapter = getChapter(activeChapterKey);
     if (!activeChapter) {
@@ -575,6 +728,7 @@ async function activate(context) {
     vscode.commands.registerCommand('vibeTour.startChapter', startChapter),
     vscode.commands.registerCommand('vibeTour.resetChapter', resetChapter),
     vscode.commands.registerCommand('vibeTour.refreshLessons', () => reloadLessons(true)),
+    vscode.commands.registerCommand('vibeTour.installAuthoringSkill', installAuthoringSkill),
     vscode.commands.registerCommand('vibeTour.showLessons', () =>
       vscode.commands.executeCommand('vibe-tour-lessons.focus')
     ),

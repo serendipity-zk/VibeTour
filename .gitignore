@@ -2,3 +2,5 @@ node_modules/
 dist/
 release/
 *.vsix
+demo-workspace/.agents/
+demo-workspace/.claude/

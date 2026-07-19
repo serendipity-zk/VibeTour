@@ -115,6 +115,19 @@ Do not turn a small recent change into a whole-repository tour. If the reliable 
 
 For a few recent edits, usually create one temporary lesson with one or two chapters and a small number of conceptual steps. A step represents one idea or transition, not one diff hunk.
 
+For a component-oriented walkthrough, choose a stable reading order before selecting ranges:
+
+- Start with the top-level container or façade and cover each of its entry points in execution order, so the learner first sees the complete public control surface.
+- Then give each substantial component or interface its own chapter, ordered by dependency or call flow. Within a component, read state and construction before lifecycle methods, then queries and cleanup paths.
+- Avoid alternating between component files merely to follow individual calls. Keep the primary path within the current component and use related-code links for cross-component handoffs.
+- Put generic interface extraction, integration notes, and design deltas after the concrete components they summarize.
+
+Treat related-code links as the lesson's navigation layer, not as rare footnotes:
+
+- When an explanation depends on a concrete caller, callee, trait or data definition, state owner, or paired cleanup/error path outside the primary range, add a related location unless it would add no new context.
+- Prefer a small set of high-value destinations that lets the reader follow the call graph or dependency boundary. Do not dump every textual reference to a symbol.
+- Mention every related destination inline at the concept it explains. A related item that is not linked from the explanation provides no guided navigation and should be removed.
+
 For every step:
 
 - Select exactly one primary file and one focused, 1-based inclusive range.
@@ -122,7 +135,7 @@ For every step:
 - Use separate primary steps for meaningful boundaries in different files.
 - Write `explanation` as a compact description, usually one sentence and one paragraph. It is the bold lead line in the inline comment.
 - Put genuinely additional detail in `key_points` only when the description alone is insufficient. Omit `key_points` when they would merely restate the description.
-- Add only useful related locations. A related location may be in any file and does not become a completion step.
+- Add useful related locations proactively when they clarify callers, callees, dependencies, ownership, or paired paths. A related location may be in any file and does not become a completion step.
 - Insert related-code links where the concept appears in the prose, using `[label](code-ref:related-id)`. Links do not need to be collected at the end.
 - Prefer no key points for a simple step. When needed, use a short list to expand the description with constraints, consequences, or non-obvious behavior.
 

@@ -34,7 +34,9 @@ class Diagnostic {
 }
 
 const workspaceRoot = path.resolve(__dirname, '../demo-workspace');
-const lessonUri = new Uri(path.join(workspaceRoot, '.code-lessons/request-lifecycle.yaml'));
+const lessonUri = new Uri(
+  path.join(workspaceRoot, '.code-lessons/walkthroughs/request-lifecycle.yaml')
+);
 const folder = { name: 'demo-workspace', uri: new Uri(workspaceRoot) };
 const fakeVscode = {
   Uri,

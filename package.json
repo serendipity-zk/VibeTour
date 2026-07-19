@@ -1,8 +1,8 @@
 {
   "name": "vibe-tour",
   "displayName": "VibeTour",
-  "description": "Interactive YAML-driven code tours rendered beside source in VS Code.",
-  "version": "0.0.2",
+  "description": "Coding-agent-authored walkthroughs that explain codebases and recent changes beside the source in VS Code.",
+  "version": "0.0.3",
   "private": true,
   "publisher": "vibetour",
   "repository": {
@@ -20,7 +20,15 @@
     "vscode": "^1.85.0"
   },
   "categories": [
+    "Education",
     "Other"
+  ],
+  "keywords": [
+    "code walkthrough",
+    "code review",
+    "codex",
+    "claude code",
+    "onboarding"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -35,6 +43,7 @@
     "onCommand:vibeTour.openRelated",
     "onCommand:vibeTour.back",
     "onCommand:vibeTour.refreshLessons",
+    "onCommand:vibeTour.installAuthoringSkill",
     "onCommand:vibeTour.showLessons",
     "onCommand:vibeTour.deleteLesson"
   ],
@@ -89,6 +98,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "vibeTour.installAuthoringSkill",
+        "title": "VibeTour: Install Lesson Authoring Skill",
+        "icon": "$(tools)"
+      },
+      {
         "command": "vibeTour.showLessons",
         "title": "VibeTour: Show Lessons"
       },
@@ -115,6 +129,18 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "vibe-tour-lessons",
+        "contents": "No lessons yet. Install the authoring skill to generate validated VibeTour YAML with Codex or Claude Code.\n[Install or Update Authoring Skill](command:vibeTour.installAuthoringSkill)",
+        "when": "!vibeTour.hasLessonErrors"
+      },
+      {
+        "view": "vibe-tour-lessons",
+        "contents": "No valid lessons are loaded. Check the Problems view for YAML errors, or install the authoring skill to generate a valid lesson.\n[Install or Update Authoring Skill](command:vibeTour.installAuthoringSkill)",
+        "when": "vibeTour.hasLessonErrors"
+      }
+    ],
     "menus": {
       "comments/commentThread/title": [
         {
@@ -162,9 +188,14 @@
       ],
       "view/title": [
         {
+          "command": "vibeTour.installAuthoringSkill",
+          "when": "view == vibe-tour-lessons",
+          "group": "navigation@1"
+        },
+        {
           "command": "vibeTour.refreshLessons",
           "when": "view == vibe-tour-lessons",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ]
     },
@@ -197,8 +228,8 @@
   },
   "scripts": {
     "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
-    "check": "node --check extension.js && node --check lessonLoader.js",
-    "test": "node test/lessonLoader.test.js",
+    "check": "node --check extension.js && node --check lessonLoader.js && node --check skillInstaller.js",
+    "test": "node --test test/*.test.js",
     "vscode:prepublish": "npm run build",
     "package": "vsce package --no-dependencies"
   },

@@ -1,10 +1,10 @@
-.agents/**
 .github/**
 .gitignore
 .vscode/**
 demo-workspace/**
 extension.js
 lessonLoader.js
+skillInstaller.js
 node_modules/**
 package-lock.json
 release/**

@@ -2,9 +2,20 @@
   "name": "vibe-tour",
   "displayName": "VibeTour",
   "description": "Interactive YAML-driven code tours rendered beside source in VS Code.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "publisher": "vibetour",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/serendipity-zk/VibeTour.git"
+  },
+  "homepage": "https://github.com/serendipity-zk/VibeTour#readme",
+  "bugs": {
+    "url": "https://github.com/serendipity-zk/VibeTour/issues"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -18,6 +29,7 @@
     "onCommand:vibeTour.resetChapter",
     "onCommand:vibeTour.openStep",
     "onCommand:vibeTour.completeCurrent",
+    "onCommand:vibeTour.copyStepContext",
     "onCommand:vibeTour.previous",
     "onCommand:vibeTour.next",
     "onCommand:vibeTour.openRelated",
@@ -47,6 +59,11 @@
         "command": "vibeTour.completeCurrent",
         "title": "VibeTour: Mark Current Step Done",
         "icon": "$(check)"
+      },
+      {
+        "command": "vibeTour.copyStepContext",
+        "title": "VibeTour: Copy Step YAML",
+        "icon": "$(copy)"
       },
       {
         "command": "vibeTour.previous",
@@ -116,9 +133,14 @@
           "group": "inline@3"
         },
         {
-          "command": "vibeTour.resetChapter",
+          "command": "vibeTour.copyStepContext",
           "when": "commentController == vibeTour.comments",
           "group": "inline@4"
+        },
+        {
+          "command": "vibeTour.resetChapter",
+          "when": "commentController == vibeTour.comments",
+          "group": "inline@5"
         }
       ],
       "view/item/context": [
@@ -178,7 +200,7 @@
     "check": "node --check extension.js && node --check lessonLoader.js",
     "test": "node test/lessonLoader.test.js",
     "vscode:prepublish": "npm run build",
-    "package": "vsce package --no-dependencies --allow-missing-repository"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.9.2",

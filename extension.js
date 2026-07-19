@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+const YAML = require('yaml');
 const { getSearchPaths, loadLessons } = require('./lessonLoader');
 
 class LessonTreeProvider {
@@ -129,8 +130,7 @@ async function activate(context) {
     overviewRulerLane: vscode.OverviewRulerLane.Center
   });
   const grayDecoration = vscode.window.createTextEditorDecorationType({
-    backgroundColor: 'rgba(128, 128, 128, 0.06)',
-    opacity: '0.48'
+    backgroundColor: 'rgba(128, 128, 128, 0.10)'
   });
   const relatedDecoration = vscode.window.createTextEditorDecorationType({
     backgroundColor: 'rgba(62, 190, 125, 0.16)',
@@ -285,6 +285,61 @@ async function activate(context) {
       }
     );
 
+  const yamlLocation = (location) => ({
+    file: location.file,
+    range: {
+      start_line: location.startLine,
+      end_line: location.endLine
+    }
+  });
+
+  const stepAsYaml = (step) => {
+    const value = {
+      id: step.id,
+      title: step.title,
+      primary: yamlLocation(step),
+      explanation: step.explanation
+    };
+    if (step.keyPoints.length > 0) {
+      value.key_points = step.keyPoints;
+    }
+    if (step.related.length > 0) {
+      value.related = step.related.map((related) => ({
+        id: related.id,
+        title: related.title,
+        location: yamlLocation(related)
+      }));
+    }
+    return YAML.stringify(value, {
+      blockQuote: 'literal',
+      lineWidth: 0
+    }).trimEnd();
+  };
+
+  const copyStepContext = async () => {
+    const step = getStep(currentStepKey);
+    const chapter = getChapterForStep(currentStepKey);
+    const lesson = getLessonForStep(currentStepKey);
+    if (!step || !chapter || !lesson) {
+      vscode.window.showInformationMessage('Start a chapter before copying step context.');
+      return;
+    }
+
+    const lines = [
+      `- Workspace: ${lesson.workspaceFolder.name}`,
+      `- Lesson: ${lesson.title}`,
+      `- Chapter: ${chapter.title}`,
+      '',
+      '```yaml',
+      stepAsYaml(step),
+      '```',
+      '',
+      'Given context, answer:'
+    ];
+    await vscode.env.clipboard.writeText(lines.join('\n'));
+    vscode.window.showInformationMessage(`Copied step YAML: ${step.title}`);
+  };
+
   const commentFor = (step) => {
     const chapter = getChapter(step.chapterKey);
     const index = chapter.steps.findIndex((candidate) => candidate.key === step.key);
@@ -297,6 +352,7 @@ async function activate(context) {
     const description = renderExplanation(step, referencedRelated)
       .replace(/\s+/g, ' ')
       .trim();
+    body.appendMarkdown(`### ${step.title}\n\n`);
     body.appendMarkdown(`**${description}**\n\n`);
 
     if (step.keyPoints.length > 0) {
@@ -322,10 +378,9 @@ async function activate(context) {
       body,
       mode: vscode.CommentMode.Preview,
       author: {
-        name: 'VibeTour',
+        name: `VibeTour · ${chapter.title} · ${index + 1}/${chapter.steps.length}`,
         iconPath: commentAuthorIcon
-      },
-      label: `${index + 1}/${chapter.steps.length} · ${chapter.title}`
+      }
     };
   };
 
@@ -567,6 +622,7 @@ async function activate(context) {
     }),
     vscode.commands.registerCommand('vibeTour.previous', () => showAdjacent(-1)),
     vscode.commands.registerCommand('vibeTour.next', () => showAdjacent(1)),
+    vscode.commands.registerCommand('vibeTour.copyStepContext', copyStepContext),
     vscode.commands.registerCommand('vibeTour.completeCurrent', async () => {
       const step = getStep(currentStepKey);
       const chapter = getChapterForStep(currentStepKey);

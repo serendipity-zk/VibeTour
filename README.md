@@ -1,91 +1,170 @@
 # VibeTour
 
-VibeTour is a YAML-driven VS Code extension. It automatically discovers `.code-lessons/**/*.yaml` and `.yml` in every workspace folder, validates files and ranges, and reloads lessons when YAML changes. The demo lesson contains two chapters and four steps across `scheduler.py`, `block_manager.py`, `request.py`, and `worker.py`. Primary ranges deliberately target focused statements inside functions rather than requiring the whole function.
+VibeTour turns version-controlled YAML into guided code walkthroughs inside VS Code. A lesson opens the relevant source range, highlights the code, and keeps a rich explanation beside it while the reader moves through a chapter.
 
-## Install the Codex skill
+Use VibeTour to explain a recent change, document an execution path, onboard someone to a subsystem, or carry durable architectural knowledge alongside the code it describes.
 
-The repository includes the lesson-authoring skill at `.agents/skills/generate-code-lesson`. Codex automatically discovers repository skills when it is started from this directory or one of its child directories, so no installation is needed for repo-local use. Invoke it with a prompt such as:
+## Features
 
-```text
-Use $generate-code-lesson to create a focused lesson for the code we just changed.
-```
+- Discover lessons automatically from `.code-lessons/**/*.yaml` and `.yml`.
+- Organize learning paths into lessons, chapters, and focused steps.
+- Start, resume, reset, and track progress per chapter.
+- Keep multi-line Markdown explanations expanded beside the relevant code.
+- Link concepts in an explanation directly to related locations across files.
+- Highlight the current, upcoming, completed, and related code ranges.
+- Copy the current Step as YAML, ready to paste into Codex or Claude with a question.
+- Validate lesson structure, paths, IDs, and line ranges and report errors in Problems.
+- Reload lessons automatically when their YAML changes.
+- Work with local, SSH, WSL, Dev Container, and Codespaces workspaces.
 
-To use the skill in unrelated repositories, ask Codex to install it at user scope:
+## Requirements
 
-```text
-Please install the local Codex skill from .agents/skills/generate-code-lesson as a user skill. Preserve any existing installation and verify that the installed skill is discoverable.
-```
+- VS Code 1.85 or newer.
+- A workspace containing at least one valid code-lesson YAML file.
 
-Codex installs user-wide skills under `$HOME/.agents/skills`. Restart Codex if the newly installed skill does not appear in `/skills` or in the `$` skill picker.
+## Install
 
-## Install the VS Code extension
+Download the latest `vibe-tour-<version>.vsix` from [GitHub Releases](https://github.com/serendipity-zk/VibeTour/releases/latest).
 
-Download `vibe-tour-<version>.vsix` from the latest GitHub Release, then install it from the command line:
+Install it from a terminal:
 
 ```bash
 code --install-extension vibe-tour-<version>.vsix
 ```
 
-If the `code` command is unavailable, open the VS Code Command Palette, run **Extensions: Install from VSIX...**, and select the downloaded file. Reload VS Code after installation, open the project you want to learn, and select the **VibeTour** book icon in the Activity Bar.
+Or open the VS Code Command Palette and run **Extensions: Install from VSIX...**. On Windows, do not double-click the VSIX: that may open the Visual Studio installer instead of VS Code.
 
-To build the VSIX locally instead:
+### Remote Development
+
+VibeTour runs as a workspace extension so it can read the project containing the lesson. For Remote SSH, WSL, Dev Containers, or Codespaces, install the VSIX from a VS Code window that is already connected to the remote workspace.
+
+If the file picker shows the remote filesystem, first copy the VSIX to the remote machine and select it there. For example, from a local PowerShell session:
+
+```powershell
+scp "$env:USERPROFILE\Downloads\vibe-tour-<version>.vsix" `
+  my-server:/tmp/vibe-tour-<version>.vsix
+```
+
+Then run **Extensions: Install from VSIX...** in the connected window and select the file under `/tmp`.
+
+## Quick start
+
+1. Open a project containing `.code-lessons/**/*.yaml` or `.yml`.
+2. Select the **VibeTour** book icon in the Activity Bar.
+3. Expand a Lesson and hover over a Chapter.
+4. Select **Play** to start at its first unfinished Step.
+5. Use the comment toolbar to move, mark the Step done, copy its YAML, or reset the Chapter.
+
+VibeTour does not modify source files. Progress is stored in VS Code workspace state.
+
+## Create lessons with Codex
+
+This repository includes a lesson-authoring skill at `.agents/skills/generate-code-lesson`. When Codex is started from this repository, it discovers the skill automatically:
+
+```text
+Use $generate-code-lesson to create a focused lesson for the code we just changed.
+```
+
+To make the skill available in unrelated repositories, ask Codex:
+
+```text
+Please install the local Codex skill from .agents/skills/generate-code-lesson as a user skill. Preserve any existing installation and verify that the installed skill is discoverable.
+```
+
+User-wide Codex skills are stored under `$HOME/.agents/skills`. Restart Codex if the skill does not appear in `/skills` or the `$` skill picker.
+
+## Lesson format
+
+Code paths are relative to the workspace folder containing the lesson. Line numbers are 1-based and inclusive.
+
+```yaml
+schema_version: 1
+
+lesson:
+  id: request-lifecycle
+  title: Request Lifecycle
+  description: Follow a request from admission to execution.
+
+  metadata:
+    type: walkthrough
+    lifecycle: temporary
+
+  chapters:
+    - id: request-admission
+      title: Request admission
+
+      steps:
+        - id: check-capacity
+          title: Check capacity
+
+          primary:
+            file: src/scheduler.py
+            range:
+              start_line: 17
+              end_line: 18
+
+          explanation: |
+            The scheduler asks [the block manager](code-ref:capacity-check)
+            whether the request fits before dispatching it.
+
+          key_points:
+            - A rejected request remains waiting.
+
+          related:
+            - id: capacity-check
+              title: Capacity decision
+              location:
+                file: src/block_manager.py
+                range:
+                  start_line: 8
+                  end_line: 10
+```
+
+The complete authoring contract and validator live in [`generate-code-lesson`](.agents/skills/generate-code-lesson/SKILL.md). A multi-file example is available in [`demo-workspace`](demo-workspace/.code-lessons/request-lifecycle.yaml).
+
+## Navigation and progress
+
+- **Play** starts or resumes a Chapter at its first unfinished Step.
+- **Previous** and **Next** move through the active Chapter.
+- **Done** completes the current Step and advances automatically.
+- **Reset** clears only that Chapter and leaves it stopped until Play is selected again.
+- Completing a Chapter removes its comment and active highlights.
+- Completed ranges keep normal source text with a subdued background.
+- Related-code links open and highlight their target; **Back** returns to the lesson Step.
+- **Copy Step YAML** preserves the explanation's `code-ref` links and related locations for an AI question.
+
+## Configuration
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `codeLessons.searchPaths` | `[".code-lessons/**/*.yaml", ".code-lessons/**/*.yml"]` | Glob patterns searched in each workspace folder. |
+| `codeLessons.autoReload` | `true` | Reload lessons when matching YAML files are created, changed, or deleted. |
+
+Use the refresh icon in the VibeTour view to reload manually. Invalid lessons remain out of the tree and appear as diagnostics in the Problems panel.
+
+## Development
 
 ```bash
 npm install
-npm run package
-code --install-extension vibe-tour-0.0.1.vsix
+npm run check
+npm test
+npm run build
 ```
 
-The extension looks for lessons under `.code-lessons/**/*.yaml` and `.code-lessons/**/*.yml` in the opened workspace. Use the bundled Codex skill to generate those files.
+Open the repository in VS Code and press F5 to launch an Extension Development Host with the bundled demo workspace. The explicit `vibetour: build` task creates the extension bundle before launch.
 
-## Automated releases
+Build an installable VSIX with:
 
-The GitHub Actions workflow in `.github/workflows/release.yml` runs checks and tests, builds the extension bundle, packages the VSIX, and uploads it as a workflow artifact.
+```bash
+npm run package
+```
 
-This works when the `VibeTour` directory is the root of the GitHub repository. If it is kept as a subdirectory in a larger repository, move the workflow to the repository-level `.github/workflows/` directory and set its working directory to `VibeTour`.
+## Releases
 
-Push a tag matching `v<package.json version>`—for example, `v0.0.1`—to create a GitHub Release and attach the prebuilt VSIX automatically. Running the workflow manually from the Actions tab builds the same VSIX as a downloadable artifact without creating a Release.
+The GitHub Actions workflow runs checks and tests, builds the bundle, and uploads a VSIX artifact. A tag matching `v<package.json version>` creates a GitHub Release and attaches the prebuilt VSIX; for example, package version `0.0.2` must use tag `v0.0.2`.
 
-## Run from source
+Manual workflow runs build the same downloadable artifact without creating a Release.
 
-1. Open this `VibeTour` directory in VS Code.
-2. Run `npm install` once.
-3. Press **F5** and choose **Run VibeTour** if prompted.
-4. In the Extension Development Host, click the **VibeTour** book icon in the Activity Bar.
-5. Hover over a chapter row and click its play button. It starts at the first unfinished step.
+## Support
 
-Try these interactions:
-
-- start or resume with the play button on a chapter row;
-- clear only that chapter's progress with its reset button;
-- switch between steps from the sidebar;
-- read the persistent, expanded Markdown explanation beside the highlighted code;
-- follow related-code links directly where a concept is mentioned in the explanation text;
-- use **Done**, **Previous**, and **Next** from the explanation;
-- click **Open related: How capacity is calculated**; the linked range receives a green background and a one-line **Back to...** action above it;
-- follow other related links between the scheduler, block manager, request model, and worker;
-- check and uncheck a step in the sidebar;
-- use **Reset chapter** from the explanation or the chapter row.
-
-Progress is stored in VS Code workspace state. This demo does not modify the source file.
-
-Lesson UI is chapter-scoped. Before a chapter is started, its source ranges have no lesson decorations and its steps do not open comments. Completing every step ends the active chapter and removes its comment, highlights, related-code state, and Back action. Reset clears only that chapter and leaves it stopped until Play is selected again.
-
-This version deliberately uses VS Code's Comments API because it is the stable editor API that can keep a large, multi-line explanation expanded next to source code. The demo workspace prevents the general Comments view from opening automatically, although lesson threads still technically participate in that view.
-
-## Lesson source
-
-The demo is loaded from `.code-lessons/request-lifecycle.yaml`. Code paths in YAML are relative to the workspace folder. Markdown explanations can link to stable related-location IDs with `code-ref:<related-id>` links.
-
-Use the refresh icon in the VibeTour view for a manual reload. Automatic reload is enabled by default and can be configured with `codeLessons.searchPaths` and `codeLessons.autoReload`.
-
-## What this spike is meant to answer
-
-- Is the fixed VS Code comment styling acceptable in exchange for a persistent large explanation?
-- Is chapter-level Play/Resume and Reset the right progress model?
-- Is the explanation close enough to the relevant code?
-- Are blue/current-yellow/completed-gray highlights understandable without being noisy?
-- Should completion advance automatically?
-- Is the sidebar useful as navigation and progress rather than as a document reader?
-
-Use `npm run check` for a quick JavaScript syntax check and `npm test` for the loader tests.
+Report bugs and feature requests in [GitHub Issues](https://github.com/serendipity-zk/VibeTour/issues).

@@ -1,0 +1,147 @@
+schema_version: 1
+
+lesson:
+  id: request-lifecycle
+  title: Request Lifecycle
+  description: Follow a request across admission, scheduling, and worker execution.
+
+  metadata:
+    type: architecture
+    lifecycle: permanent
+
+  chapters:
+    - id: request-admission
+      title: Request admission
+
+      steps:
+        - id: capacity-contract
+          title: Define the capacity contract
+
+          primary:
+            file: src/block_manager.py
+            range:
+              start_line: 10
+              end_line: 10
+
+          explanation: |
+            `can_allocate` makes one capacity decision for
+            [the request](code-ref:request-blocks) without exposing allocator
+            accounting to [the scheduler](code-ref:scheduler-consumer).
+
+          key_points:
+            - The result is an all-or-nothing Boolean decision.
+
+          related:
+            - id: request-blocks
+              title: The request supplying required_blocks
+              location:
+                file: src/request.py
+                range:
+                  start_line: 7
+                  end_line: 7
+
+            - id: scheduler-consumer
+              title: Where the scheduler consumes this decision
+              location:
+                file: src/scheduler.py
+                range:
+                  start_line: 17
+                  end_line: 18
+
+        - id: check-capacity
+          title: Check KV-cache capacity
+
+          primary:
+            file: src/scheduler.py
+            range:
+              start_line: 17
+              end_line: 18
+
+          explanation: |
+            The scheduler compares
+            [`Request.required_blocks`](code-ref:request-metadata) through
+            [`BlockManager.can_allocate`](code-ref:capacity-calculation) and keeps
+            requests in `WAITING` when capacity is insufficient.
+
+          key_points:
+            - A waiting request returns before any execution begins.
+
+          related:
+            - id: capacity-calculation
+              title: How capacity is calculated
+              location:
+                file: src/block_manager.py
+                range:
+                  start_line: 10
+                  end_line: 10
+
+            - id: request-metadata
+              title: The request metadata used by admission
+              location:
+                file: src/request.py
+                range:
+                  start_line: 7
+                  end_line: 7
+
+    - id: worker-execution
+      title: Worker execution
+
+      steps:
+        - id: dispatch-request
+          title: Dispatch admitted request
+
+          primary:
+            file: src/scheduler.py
+            range:
+              start_line: 22
+              end_line: 24
+
+          explanation: |
+            Dispatch calls [the worker](code-ref:worker-receiver) only after the
+            request reaches `READY`.
+
+          key_points:
+            - The worker does not repeat capacity checks.
+
+          related:
+            - id: worker-receiver
+              title: The worker receiving the request
+              location:
+                file: src/worker.py
+                range:
+                  start_line: 9
+                  end_line: 9
+
+        - id: worker-execute
+          title: Record worker execution
+
+          primary:
+            file: src/worker.py
+            range:
+              start_line: 9
+              end_line: 9
+
+          explanation: |
+            The worker receives [an admitted `Request`](code-ref:request-shape)
+            through [the scheduler handoff](code-ref:dispatch-call-site) and records
+            its identifier as executed work.
+
+          key_points:
+            - A production worker would launch model execution at this boundary.
+
+          related:
+            - id: dispatch-call-site
+              title: The dispatch call site
+              location:
+                file: src/scheduler.py
+                range:
+                  start_line: 22
+                  end_line: 24
+
+            - id: request-shape
+              title: The request shape crossing the boundary
+              location:
+                file: src/request.py
+                range:
+                  start_line: 7
+                  end_line: 7

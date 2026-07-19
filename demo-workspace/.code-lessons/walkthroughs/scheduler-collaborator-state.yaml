@@ -1,0 +1,97 @@
+schema_version: 1
+
+lesson:
+  id: scheduler-collaborator-state
+  title: Initialize Scheduler Collaborators
+  description: See how capacity, execution history, and scheduler dependencies are initialized before a request is scheduled.
+
+  metadata:
+    type: walkthrough
+    lifecycle: temporary
+
+  chapters:
+    - id: initialize-collaborators
+      title: Initialize collaborator state
+
+      steps:
+        - id: store-capacity
+          title: Store the available block budget
+
+          primary:
+            file: src/block_manager.py
+            range:
+              start_line: 5
+              end_line: 6
+
+          explanation: |
+            The constructor stores the caller-supplied block budget so
+            [`can_allocate`](code-ref:capacity-consumer) can compare requests
+            with the manager's current capacity.
+
+          related:
+            - id: capacity-consumer
+              title: Capacity used by admission checks
+              location:
+                file: src/block_manager.py
+                range:
+                  start_line: 8
+                  end_line: 10
+
+        - id: initialize-execution-history
+          title: Start an empty execution history
+
+          primary:
+            file: src/worker.py
+            range:
+              start_line: 5
+              end_line: 6
+
+          explanation: |
+            A new `Worker` creates an execution-history list that
+            [`execute`](code-ref:history-writer) later appends request IDs to.
+
+          key_points:
+            - Execution history is initialized per worker instance.
+
+          related:
+            - id: history-writer
+              title: Request IDs added after execution
+              location:
+                file: src/worker.py
+                range:
+                  start_line: 8
+                  end_line: 9
+
+        - id: retain-collaborators
+          title: Retain the scheduler collaborators
+
+          primary:
+            file: src/scheduler.py
+            range:
+              start_line: 12
+              end_line: 14
+
+          explanation: |
+            The scheduler retains injected collaborators, delegating admission to
+            [the block manager](code-ref:capacity-call) and execution to
+            [the worker](code-ref:worker-call).
+
+          key_points:
+            - The scheduler does not construct either collaborator itself.
+
+          related:
+            - id: capacity-call
+              title: Scheduler delegates the admission decision
+              location:
+                file: src/scheduler.py
+                range:
+                  start_line: 16
+                  end_line: 18
+
+            - id: worker-call
+              title: Scheduler delegates admitted execution
+              location:
+                file: src/scheduler.py
+                range:
+                  start_line: 21
+                  end_line: 24

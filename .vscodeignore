@@ -1,0 +1,12 @@
+.agents/**
+.github/**
+.gitignore
+.vscode/**
+demo-workspace/**
+extension.js
+lessonLoader.js
+node_modules/**
+package-lock.json
+release/**
+test/**
+*.vsix

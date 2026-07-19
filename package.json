@@ -1,0 +1,187 @@
+{
+  "name": "vibe-tour",
+  "displayName": "VibeTour",
+  "description": "Interactive YAML-driven code tours rendered beside source in VS Code.",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "vibetour",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:vibe-tour-lessons",
+    "onCommand:vibeTour.startChapter",
+    "onCommand:vibeTour.resetChapter",
+    "onCommand:vibeTour.openStep",
+    "onCommand:vibeTour.completeCurrent",
+    "onCommand:vibeTour.previous",
+    "onCommand:vibeTour.next",
+    "onCommand:vibeTour.openRelated",
+    "onCommand:vibeTour.back",
+    "onCommand:vibeTour.refreshLessons",
+    "onCommand:vibeTour.showLessons",
+    "onCommand:vibeTour.deleteLesson"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vibeTour.startChapter",
+        "title": "VibeTour: Start or Resume Chapter",
+        "icon": "$(play)"
+      },
+      {
+        "command": "vibeTour.resetChapter",
+        "title": "VibeTour: Reset Chapter",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "vibeTour.openStep",
+        "title": "VibeTour: Open Step"
+      },
+      {
+        "command": "vibeTour.completeCurrent",
+        "title": "VibeTour: Mark Current Step Done",
+        "icon": "$(check)"
+      },
+      {
+        "command": "vibeTour.previous",
+        "title": "VibeTour: Previous Step",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "vibeTour.next",
+        "title": "VibeTour: Next Step",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "vibeTour.openRelated",
+        "title": "VibeTour: Open Related Code"
+      },
+      {
+        "command": "vibeTour.back",
+        "title": "VibeTour: Back to Lesson Step"
+      },
+      {
+        "command": "vibeTour.refreshLessons",
+        "title": "VibeTour: Refresh Lessons",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vibeTour.showLessons",
+        "title": "VibeTour: Show Lessons"
+      },
+      {
+        "command": "vibeTour.deleteLesson",
+        "title": "VibeTour: Delete Lesson",
+        "icon": "$(trash)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vibe-tour",
+          "title": "VibeTour",
+          "icon": "media/book.svg"
+        }
+      ]
+    },
+    "views": {
+      "vibe-tour": [
+        {
+          "id": "vibe-tour-lessons",
+          "name": "Lessons"
+        }
+      ]
+    },
+    "menus": {
+      "comments/commentThread/title": [
+        {
+          "command": "vibeTour.previous",
+          "when": "commentController == vibeTour.comments && commentThread =~ /hasPrevious/",
+          "group": "inline@1"
+        },
+        {
+          "command": "vibeTour.next",
+          "when": "commentController == vibeTour.comments && commentThread =~ /hasNext/",
+          "group": "inline@2"
+        },
+        {
+          "command": "vibeTour.completeCurrent",
+          "when": "commentController == vibeTour.comments && commentThread =~ /incomplete/",
+          "group": "inline@3"
+        },
+        {
+          "command": "vibeTour.resetChapter",
+          "when": "commentController == vibeTour.comments",
+          "group": "inline@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "vibeTour.deleteLesson",
+          "when": "view == vibe-tour-lessons && viewItem == codeLesson",
+          "group": "inline@1"
+        },
+        {
+          "command": "vibeTour.startChapter",
+          "when": "view == vibe-tour-lessons && viewItem == codeLessonChapter",
+          "group": "inline@1"
+        },
+        {
+          "command": "vibeTour.resetChapter",
+          "when": "view == vibe-tour-lessons && viewItem == codeLessonChapter",
+          "group": "inline@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "vibeTour.refreshLessons",
+          "when": "view == vibe-tour-lessons",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "VibeTour",
+      "properties": {
+        "codeLessons.searchPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".code-lessons/**/*.yaml",
+            ".code-lessons/**/*.yml"
+          ],
+          "scope": "resource",
+          "description": "Glob patterns, relative to each workspace folder, used to discover code lesson YAML files."
+        },
+        "codeLessons.autoReload": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Automatically reload lessons when discovered YAML files change."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "yaml": "^2.8.0"
+  },
+  "scripts": {
+    "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
+    "check": "node --check extension.js && node --check lessonLoader.js",
+    "test": "node test/lessonLoader.test.js",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1"
+  }
+}

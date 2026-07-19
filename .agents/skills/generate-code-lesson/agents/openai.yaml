@@ -1,0 +1,7 @@
+interface:
+  display_name: "Generate Code Lesson"
+  short_description: "Generate focused, validated code-lesson YAML"
+  default_prompt: "Use $generate-code-lesson to generate or update a focused lesson for the code we just changed."
+
+policy:
+  allow_implicit_invocation: true

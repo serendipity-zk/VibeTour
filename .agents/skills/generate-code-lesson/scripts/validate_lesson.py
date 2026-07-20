@@ -99,7 +99,7 @@ class LessonValidator:
         normalized_file = raw_file.replace("\\", "/")
         relative = PurePosixPath(normalized_file)
         if relative.is_absolute() or normalized_file in {".", ".."} or ".." in relative.parts:
-            self.error(f"{label}.file", "must stay inside the workspace folder")
+            self.error(f"{label}.file", "must stay inside the lesson root")
             return
 
         start = range_value.get("start_line")
@@ -118,7 +118,7 @@ class LessonValidator:
         try:
             file_path.relative_to(self.workspace_root)
         except ValueError:
-            self.error(f"{label}.file", "resolves outside the workspace folder")
+            self.error(f"{label}.file", "resolves outside the lesson root")
             return
 
         if not file_path.is_file():
@@ -293,7 +293,7 @@ def parse_args() -> argparse.Namespace:
         "--workspace-root",
         type=Path,
         default=Path.cwd(),
-        help="workspace root used to resolve lesson file paths (default: cwd)",
+        help="lesson root used to resolve lesson file paths (default: cwd)",
     )
     return parser.parse_args()
 

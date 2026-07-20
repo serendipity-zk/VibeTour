@@ -4,9 +4,11 @@ const { getSearchPaths, loadLessons } = require('./lessonLoader');
 const path = require('node:path');
 const {
   HARNESS_CONFIG,
+  findMatchingSkillInstallation,
   getSkillTarget,
   installSkillDirectory,
-  pathExists
+  pathExists,
+  skillMatchesBundled
 } = require('./skillInstaller');
 
 class LessonTreeProvider {
@@ -36,6 +38,7 @@ class LessonTreeProvider {
       item.contextValue = 'codeLesson';
       item.tooltip = new vscode.MarkdownString(
         `${element.lesson.description || element.lesson.title}\n\n` +
+        `Root: \`${element.lesson.rootUri.fsPath}\`\n\n` +
         `Source: \`${element.lesson.sourceUri.fsPath}\``
       );
       return item;
@@ -51,8 +54,10 @@ class LessonTreeProvider {
       item.id = `code-lesson-chapter-${element.chapter.key}`;
       item.description = `${completed}/${element.chapter.steps.length}${active ? ' · active' : ''}`;
       item.iconPath = new vscode.ThemeIcon(active ? 'debug-alt' : 'library');
-      item.contextValue = 'codeLessonChapter';
-      item.tooltip = 'Use Play to start or resume this chapter; use Reset to clear its progress.';
+      item.contextValue = active ? 'codeLessonChapterActive' : 'codeLessonChapter';
+      item.tooltip = active
+        ? 'Use Stop to close the guide while keeping progress; use Reset to clear it.'
+        : 'Use Play to start or resume this chapter; use Reset to clear its progress.';
       return item;
     }
 
@@ -116,6 +121,43 @@ async function activate(context) {
   let watchers = [];
   let reloadTimer;
 
+  const bundledSkillDirectory = path.join(
+    context.extensionPath,
+    '.agents',
+    'skills',
+    'generate-code-lesson'
+  );
+
+  const getSkillCandidateDirectories = () => {
+    const directories = [];
+    for (const harness of Object.keys(HARNESS_CONFIG)) {
+      for (const folder of vscode.workspace.workspaceFolders || []) {
+        directories.push(getSkillTarget(harness, 'workspace', {
+          workspaceRoot: folder.uri.fsPath
+        }));
+      }
+      directories.push(getSkillTarget(harness, 'user'));
+    }
+    return directories;
+  };
+
+  const refreshSkillInstallStatus = async () => {
+    let matchingInstallation;
+    try {
+      matchingInstallation = await findMatchingSkillInstallation(
+        bundledSkillDirectory,
+        getSkillCandidateDirectories()
+      );
+    } catch (error) {
+      console.warn('Unable to inspect VibeTour skill installations:', error);
+    }
+    await vscode.commands.executeCommand(
+      'setContext',
+      'vibeTour.needsSkillInstall',
+      !matchingInstallation
+    );
+  };
+
   const controller = vscode.comments.createCommentController(
     'vibeTour.comments',
     'VibeTour'
@@ -164,7 +206,7 @@ async function activate(context) {
   };
   const getUriForLocation = (step, location = step) => {
     const lesson = getLesson(step.lessonKey);
-    return lesson ? vscode.Uri.joinPath(lesson.workspaceFolder.uri, location.file) : undefined;
+    return lesson ? vscode.Uri.joinPath(lesson.rootUri, location.file) : undefined;
   };
 
   const chapterFromArgument = (argument) => {
@@ -275,12 +317,6 @@ async function activate(context) {
       }
     }
 
-    const sourceDirectory = path.join(
-      context.extensionPath,
-      '.agents',
-      'skills',
-      'generate-code-lesson'
-    );
     const installations = selectedHarnesses.map((item) => ({
       harness: item.harness,
       label: HARNESS_CONFIG[item.harness].label,
@@ -289,17 +325,36 @@ async function activate(context) {
       })
     }));
 
+    let currentInstallations;
     let existingInstallations;
     try {
+      currentInstallations = [];
       existingInstallations = [];
       for (const installation of installations) {
-        if (await pathExists(installation.targetDirectory)) {
+        if (await skillMatchesBundled(
+          bundledSkillDirectory,
+          installation.targetDirectory
+        )) {
+          currentInstallations.push(installation);
+        } else if (await pathExists(installation.targetDirectory)) {
           existingInstallations.push(installation);
         }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       vscode.window.showErrorMessage(`Unable to inspect skill installations: ${message}`);
+      return;
+    }
+
+    const pendingInstallations = installations.filter(
+      (installation) => !currentInstallations.includes(installation)
+    );
+    if (pendingInstallations.length === 0) {
+      const labels = currentInstallations.map((item) => item.label).join(' and ');
+      vscode.window.showInformationMessage(
+        `The bundled generate-code-lesson skill is already installed for ${labels}.`
+      );
+      await refreshSkillInstallStatus();
       return;
     }
 
@@ -317,9 +372,9 @@ async function activate(context) {
 
     const installed = [];
     const failed = [];
-    for (const installation of installations) {
+    for (const installation of pendingInstallations) {
       try {
-        await installSkillDirectory(sourceDirectory, installation.targetDirectory, {
+        await installSkillDirectory(bundledSkillDirectory, installation.targetDirectory, {
           replace: existingInstallations.includes(installation)
         });
         installed.push(installation);
@@ -348,6 +403,7 @@ async function activate(context) {
         failed.map((item) => item.message).join('; ')
       );
     }
+    await refreshSkillInstallStatus();
   };
 
   const toRange = (document, location) => {
@@ -478,7 +534,7 @@ async function activate(context) {
     }
 
     const lines = [
-      `- Workspace: ${lesson.workspaceFolder.name}`,
+      `- Workspace: ${lesson.rootLabel}`,
       `- Lesson: ${lesson.title}`,
       `- Chapter: ${chapter.title}`,
       '',
@@ -636,6 +692,18 @@ async function activate(context) {
     vscode.window.showInformationMessage(`Reset chapter: ${chapter.title}`);
   };
 
+  const stopChapter = (argument) => {
+    const chapter = chapterFromArgument(argument);
+    if (!chapter || chapter.key !== activeChapterKey) {
+      return;
+    }
+    const title = chapter.title;
+    deactivateChapter();
+    vscode.window.showInformationMessage(
+      `Stopped chapter: ${title}. Completed steps were kept.`
+    );
+  };
+
   const reloadLessons = async (notify = false) => {
     const result = await loadLessons(diagnostics);
     lessons = result.lessons;
@@ -726,8 +794,14 @@ async function activate(context) {
     }),
     vscode.languages.registerCodeLensProvider({ scheme: 'file' }, relatedCodeLensProvider),
     vscode.commands.registerCommand('vibeTour.startChapter', startChapter),
+    vscode.commands.registerCommand('vibeTour.stopChapter', stopChapter),
     vscode.commands.registerCommand('vibeTour.resetChapter', resetChapter),
-    vscode.commands.registerCommand('vibeTour.refreshLessons', () => reloadLessons(true)),
+    vscode.commands.registerCommand('vibeTour.refreshLessons', async () => {
+      await Promise.all([
+        reloadLessons(true),
+        refreshSkillInstallStatus()
+      ]);
+    }),
     vscode.commands.registerCommand('vibeTour.installAuthoringSkill', installAuthoringSkill),
     vscode.commands.registerCommand('vibeTour.showLessons', () =>
       vscode.commands.executeCommand('vibe-tour-lessons.focus')
@@ -860,9 +934,17 @@ async function activate(context) {
       }
     }),
     vscode.window.onDidChangeActiveTextEditor(refreshDecorations),
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) {
+        void refreshSkillInstallStatus();
+      }
+    }),
     vscode.workspace.onDidChangeWorkspaceFolders(async () => {
       rebuildWatchers();
-      await reloadLessons(false);
+      await Promise.all([
+        reloadLessons(false),
+        refreshSkillInstallStatus()
+      ]);
     }),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (
@@ -876,7 +958,10 @@ async function activate(context) {
   );
 
   rebuildWatchers();
-  await reloadLessons(false);
+  await Promise.all([
+    reloadLessons(false),
+    refreshSkillInstallStatus()
+  ]);
   refreshDecorations();
 
   const rightPanelWasInitialized = context.workspaceState.get(

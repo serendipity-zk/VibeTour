@@ -3,8 +3,8 @@ const vscode = require('vscode');
 const YAML = require('yaml');
 
 const DEFAULT_SEARCH_PATHS = [
-  '.code-lessons/**/*.yaml',
-  '.code-lessons/**/*.yml'
+  '**/.code-lessons/**/*.yaml',
+  '**/.code-lessons/**/*.yml'
 ];
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -65,7 +65,7 @@ function normalizeRelativePath(value, label) {
     normalized === '..' ||
     normalized.startsWith('../')
   ) {
-    throw new LessonValidationError(`${label} must stay inside its workspace folder.`);
+    throw new LessonValidationError(`${label} must stay inside its lesson root.`);
   }
   return normalized;
 }
@@ -93,6 +93,42 @@ function normalizeLocation(value, label) {
   };
 }
 
+function getLessonRoot(folder, sourceUri) {
+  const relative = path.relative(folder.uri.fsPath, sourceUri.fsPath);
+  const normalized = relative.replaceAll('\\', '/');
+  if (
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    path.isAbsolute(relative)
+  ) {
+    return {
+      uri: folder.uri,
+      relativePath: '',
+      label: folder.name
+    };
+  }
+
+  const segments = normalized.split('/');
+  const markerIndex = segments.lastIndexOf('.code-lessons');
+  if (markerIndex < 0) {
+    return {
+      uri: folder.uri,
+      relativePath: '',
+      label: folder.name
+    };
+  }
+
+  const rootSegments = segments.slice(0, markerIndex);
+  const relativePath = rootSegments.join('/');
+  return {
+    uri: rootSegments.length > 0
+      ? vscode.Uri.joinPath(folder.uri, ...rootSegments)
+      : folder.uri,
+    relativePath,
+    label: relativePath ? `${folder.name}/${relativePath}` : folder.name
+  };
+}
+
 function normalizeLesson(data, folder, sourceUri) {
   const root = requireObject(data, 'YAML document');
   if (root.schema_version !== 1) {
@@ -101,7 +137,8 @@ function normalizeLesson(data, folder, sourceUri) {
 
   const rawLesson = requireObject(root.lesson, 'lesson');
   const lessonId = requireId(rawLesson.id, 'lesson.id');
-  const lessonKey = `${folder.uri.toString()}::${lessonId}`;
+  const lessonRoot = getLessonRoot(folder, sourceUri);
+  const lessonKey = `${lessonRoot.uri.toString()}::${lessonId}`;
   const rawChapters = requireArray(rawLesson.chapters, 'lesson.chapters');
   const chapterIds = new Set();
   const stepIds = new Set();
@@ -116,6 +153,9 @@ function normalizeLesson(data, folder, sourceUri) {
       : {},
     sourceUri,
     workspaceFolder: folder,
+    rootUri: lessonRoot.uri,
+    rootRelativePath: lessonRoot.relativePath,
+    rootLabel: lessonRoot.label,
     chapters: []
   };
 
@@ -213,7 +253,7 @@ async function validateLocations(lesson) {
   for (const location of locations) {
     let lineCount = lineCounts.get(location.file);
     if (lineCount === undefined) {
-      const uri = vscode.Uri.joinPath(lesson.workspaceFolder.uri, location.file);
+      const uri = vscode.Uri.joinPath(lesson.rootUri, location.file);
       let bytes;
       try {
         bytes = await vscode.workspace.fs.readFile(uri);
@@ -307,7 +347,7 @@ async function loadLessons(diagnostics) {
       if (seenKeys.has(parsed.key)) {
         diagnostics.set(uri, [new vscode.Diagnostic(
           new vscode.Range(0, 0, 0, 1),
-          `Duplicate lesson id "${parsed.id}" in workspace folder "${folder.name}".`,
+          `Duplicate lesson id "${parsed.id}" under lesson root "${parsed.rootLabel}".`,
           vscode.DiagnosticSeverity.Error
         )]);
         errorCount += 1;
@@ -323,6 +363,7 @@ async function loadLessons(diagnostics) {
 
 module.exports = {
   DEFAULT_SEARCH_PATHS,
+  getLessonRoot,
   getSearchPaths,
   loadLessons,
   normalizeLesson

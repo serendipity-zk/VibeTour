@@ -2,7 +2,7 @@
   "name": "vibe-tour",
   "displayName": "VibeTour",
   "description": "Coding-agent-authored walkthroughs that explain codebases and recent changes beside the source in VS Code.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "publisher": "vibetour",
   "repository": {
@@ -34,6 +34,7 @@
     "onStartupFinished",
     "onView:vibe-tour-lessons",
     "onCommand:vibeTour.startChapter",
+    "onCommand:vibeTour.stopChapter",
     "onCommand:vibeTour.resetChapter",
     "onCommand:vibeTour.openStep",
     "onCommand:vibeTour.completeCurrent",
@@ -54,6 +55,11 @@
         "command": "vibeTour.startChapter",
         "title": "VibeTour: Start or Resume Chapter",
         "icon": "$(play)"
+      },
+      {
+        "command": "vibeTour.stopChapter",
+        "title": "VibeTour: Stop Chapter",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "vibeTour.resetChapter",
@@ -133,12 +139,22 @@
       {
         "view": "vibe-tour-lessons",
         "contents": "No lessons yet. Install the authoring skill to generate validated VibeTour YAML with Codex or Claude Code.\n[Install or Update Authoring Skill](command:vibeTour.installAuthoringSkill)",
-        "when": "!vibeTour.hasLessonErrors"
+        "when": "!vibeTour.hasLessonErrors && vibeTour.needsSkillInstall"
       },
       {
         "view": "vibe-tour-lessons",
         "contents": "No valid lessons are loaded. Check the Problems view for YAML errors, or install the authoring skill to generate a valid lesson.\n[Install or Update Authoring Skill](command:vibeTour.installAuthoringSkill)",
-        "when": "vibeTour.hasLessonErrors"
+        "when": "vibeTour.hasLessonErrors && vibeTour.needsSkillInstall"
+      },
+      {
+        "view": "vibe-tour-lessons",
+        "contents": "No lessons yet. Ask Codex or Claude Code to generate one with the installed VibeTour authoring skill.",
+        "when": "!vibeTour.hasLessonErrors && !vibeTour.needsSkillInstall"
+      },
+      {
+        "view": "vibe-tour-lessons",
+        "contents": "No valid lessons are loaded. Check the Problems view for YAML errors.",
+        "when": "vibeTour.hasLessonErrors && !vibeTour.needsSkillInstall"
       }
     ],
     "menus": {
@@ -159,14 +175,19 @@
           "group": "inline@3"
         },
         {
-          "command": "vibeTour.copyStepContext",
+          "command": "vibeTour.stopChapter",
           "when": "commentController == vibeTour.comments",
           "group": "inline@4"
         },
         {
-          "command": "vibeTour.resetChapter",
+          "command": "vibeTour.copyStepContext",
           "when": "commentController == vibeTour.comments",
           "group": "inline@5"
+        },
+        {
+          "command": "vibeTour.resetChapter",
+          "when": "commentController == vibeTour.comments",
+          "group": "inline@6"
         }
       ],
       "view/item/context": [
@@ -181,15 +202,20 @@
           "group": "inline@1"
         },
         {
+          "command": "vibeTour.stopChapter",
+          "when": "view == vibe-tour-lessons && viewItem == codeLessonChapterActive",
+          "group": "inline@1"
+        },
+        {
           "command": "vibeTour.resetChapter",
-          "when": "view == vibe-tour-lessons && viewItem == codeLessonChapter",
+          "when": "view == vibe-tour-lessons && viewItem =~ /codeLessonChapter/",
           "group": "inline@2"
         }
       ],
       "view/title": [
         {
           "command": "vibeTour.installAuthoringSkill",
-          "when": "view == vibe-tour-lessons",
+          "when": "view == vibe-tour-lessons && vibeTour.needsSkillInstall",
           "group": "navigation@1"
         },
         {
@@ -208,11 +234,11 @@
             "type": "string"
           },
           "default": [
-            ".code-lessons/**/*.yaml",
-            ".code-lessons/**/*.yml"
+            "**/.code-lessons/**/*.yaml",
+            "**/.code-lessons/**/*.yml"
           ],
           "scope": "resource",
-          "description": "Glob patterns, relative to each workspace folder, used to discover code lesson YAML files."
+          "description": "Glob patterns, relative to each workspace folder, used to discover code lesson YAML files, including lessons owned by nested repositories."
         },
         "codeLessons.autoReload": {
           "type": "boolean",

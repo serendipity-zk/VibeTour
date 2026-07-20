@@ -1,0 +1,72 @@
+schema_version: 1
+
+lesson:
+  id: nested-repo-checkout
+  title: Nested Repo Checkout
+  description: Follow checkout inside a repository nested beneath the outer workspace.
+
+  metadata:
+    type: walkthrough
+    lifecycle: temporary
+
+  chapters:
+    - id: reserve-inventory
+      title: Reserve inventory locally
+
+      steps:
+        - id: check-availability
+          title: Check local stock
+
+          primary:
+            file: src/inventory.py
+            range:
+              start_line: 8
+              end_line: 9
+
+          explanation: |
+            Availability compares the requested quantity from
+            [the cart item](code-ref:cart-item) with inventory owned entirely by
+            this nested repository.
+
+          related:
+            - id: cart-item
+              title: The quantity requested at checkout
+              location:
+                file: src/cart.py
+                range:
+                  start_line: 4
+                  end_line: 7
+
+            - id: availability-caller
+              title: Checkout consuming the availability decision
+              location:
+                file: src/checkout.py
+                range:
+                  start_line: 11
+                  end_line: 13
+
+        - id: reserve-and-confirm
+          title: Reserve and confirm
+
+          primary:
+            file: src/checkout.py
+            range:
+              start_line: 11
+              end_line: 15
+
+          explanation: |
+            Checkout stops early when stock is unavailable; otherwise it calls
+            [the inventory mutation](code-ref:reserve-stock) before returning a
+            confirmation.
+
+          key_points:
+            - All paths are relative to the nested `checkout-service` root.
+
+          related:
+            - id: reserve-stock
+              title: Inventory mutation guarded by the same check
+              location:
+                file: src/inventory.py
+                range:
+                  start_line: 11
+                  end_line: 14

@@ -55,6 +55,74 @@ async function pathExists(targetPath) {
   }
 }
 
+async function statIfExists(targetPath) {
+  try {
+    return await fs.stat(targetPath);
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function bundledPathMatches(sourcePath, targetPath) {
+  const source = await fs.stat(sourcePath);
+  const target = await statIfExists(targetPath);
+  if (!target) {
+    return false;
+  }
+
+  if (source.isFile()) {
+    if (!target.isFile() || source.size !== target.size) {
+      return false;
+    }
+    const [sourceBytes, targetBytes] = await Promise.all([
+      fs.readFile(sourcePath),
+      fs.readFile(targetPath)
+    ]);
+    return sourceBytes.equals(targetBytes);
+  }
+
+  if (!source.isDirectory() || !target.isDirectory()) {
+    return false;
+  }
+
+  const entries = await fs.readdir(sourcePath);
+  for (const entry of entries) {
+    if (!await bundledPathMatches(
+      path.join(sourcePath, entry),
+      path.join(targetPath, entry)
+    )) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function skillMatchesBundled(sourceDirectory, targetDirectory) {
+  const source = await fs.stat(sourceDirectory);
+  if (!source.isDirectory()) {
+    throw new Error(`Bundled skill is not a directory: ${sourceDirectory}`);
+  }
+  return bundledPathMatches(sourceDirectory, targetDirectory);
+}
+
+async function findMatchingSkillInstallation(sourceDirectory, targetDirectories) {
+  const visited = new Set();
+  for (const targetDirectory of targetDirectories) {
+    const normalized = path.resolve(targetDirectory);
+    if (visited.has(normalized)) {
+      continue;
+    }
+    visited.add(normalized);
+    if (await skillMatchesBundled(sourceDirectory, normalized)) {
+      return normalized;
+    }
+  }
+  return undefined;
+}
+
 async function installSkillDirectory(sourceDirectory, targetDirectory, options = {}) {
   const source = await fs.stat(sourceDirectory);
   if (!source.isDirectory()) {
@@ -99,7 +167,9 @@ async function installSkillDirectory(sourceDirectory, targetDirectory, options =
 module.exports = {
   HARNESS_CONFIG,
   SKILL_NAME,
+  findMatchingSkillInstallation,
   getSkillTarget,
   installSkillDirectory,
-  pathExists
+  pathExists,
+  skillMatchesBundled
 };

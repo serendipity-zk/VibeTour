@@ -45,6 +45,7 @@ Coding agents make changes quickly, but reviewing those changes can be just as c
 
 - Generate lessons from the current codebase or the changes your agent just made.
 - Preserve the agent's explanation as version-controlled `.code-lessons` files.
+- Discover `.code-lessons` owned by nested repositories in a multi-repo workspace.
 - Organize learning paths into lessons, chapters, and focused steps.
 - Start, resume, reset, and track progress per chapter.
 - Keep multi-line Markdown explanations expanded beside the relevant code.
@@ -118,7 +119,7 @@ VibeTour includes the `generate-code-lesson` authoring skill for [Codex](https:/
 
 ### 🖱️ Install from VS Code
 
-When no lesson is loaded, the VibeTour Lessons panel shows an **Install or Update Authoring Skill** button. You can also use the tools button in the panel title or run **VibeTour: Install Lesson Authoring Skill** from the Command Palette. The installer lets you:
+When no lesson is loaded, the VibeTour Lessons panel shows an **Install or Update Authoring Skill** button. VibeTour compares the bundled skill with the project-level and user-level Codex and Claude installations; once any of those locations already has the current bundled version, the panel button is hidden. The Command Palette entry remains available for installing the skill into another agent or scope. The installer lets you:
 
 - select Codex / `.agents`-compatible agents, Claude Code, or both;
 - install into the current workspace or for the current user;
@@ -179,7 +180,9 @@ In Claude Code, use the slash-command form:
 
 ## 📝 Lesson format
 
-The coding agent writes this format for VibeTour; users normally do not need to author it manually. It remains plain, reviewable YAML so teams can inspect, edit, and commit an explanation when it should travel with the code. Paths are relative to the workspace folder containing the lesson, and line numbers are 1-based and inclusive.
+The coding agent writes this format for VibeTour; users normally do not need to author it manually. It remains plain, reviewable YAML so teams can inspect, edit, and commit an explanation when it should travel with the code.
+
+Each `.code-lessons` directory defines a lesson root: paths are resolved from its parent directory, and line numbers are 1-based and inclusive. A lesson at `services/api/.code-lessons/walkthroughs/auth.yaml` therefore resolves `src/auth.ts` as `services/api/src/auth.ts`. This supports workspaces containing multiple repositories without requiring each repository to be opened as a separate VS Code workspace folder.
 
 ```yaml
 schema_version: 1
@@ -224,13 +227,14 @@ lesson:
                   end_line: 10
 ```
 
-The complete authoring contract and validator live in [`generate-code-lesson`](.agents/skills/generate-code-lesson/SKILL.md). A multi-file example is available in [`demo-workspace`](demo-workspace/.code-lessons/walkthroughs/request-lifecycle.yaml).
+The complete authoring contract and validator live in [`generate-code-lesson`](.agents/skills/generate-code-lesson/SKILL.md). The [`demo-workspace`](demo-workspace/.code-lessons/walkthroughs/request-lifecycle.yaml) includes both a workspace-level multi-file lesson and a [lesson owned by a nested repository](demo-workspace/repos/checkout-service/.code-lessons/walkthroughs/checkout-flow.yaml).
 
 ## 🧭 Navigation and progress
 
 - **Play** starts or resumes a Chapter at its first unfinished Step.
 - **Previous** and **Next** move through the active Chapter.
 - **Done** completes the current Step and advances automatically.
+- **Stop** closes the current comment and highlights while keeping Chapter progress.
 - **Reset** clears only that Chapter and leaves it stopped until Play is selected again.
 - Completing a Chapter removes its comment and active highlights.
 - Completed ranges keep normal source text with a subdued background.
@@ -241,7 +245,7 @@ The complete authoring contract and validator live in [`generate-code-lesson`](.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `codeLessons.searchPaths` | `[".code-lessons/**/*.yaml", ".code-lessons/**/*.yml"]` | Glob patterns searched in each workspace folder. |
+| `codeLessons.searchPaths` | `["**/.code-lessons/**/*.yaml", "**/.code-lessons/**/*.yml"]` | Glob patterns searched in each workspace folder, including nested repository roots. |
 | `codeLessons.autoReload` | `true` | Reload lessons when matching YAML files are created, changed, or deleted. |
 
 Use the refresh icon in the VibeTour view to reload manually. Invalid lessons remain out of the tree and appear as diagnostics in the Problems panel.

@@ -5,8 +5,10 @@ const path = require('node:path');
 const test = require('node:test');
 
 const {
+  findMatchingSkillInstallation,
   getSkillTarget,
-  installSkillDirectory
+  installSkillDirectory,
+  skillMatchesBundled
 } = require('../skillInstaller');
 
 test('maps Codex and Claude Code scopes to their documented skill directories', () => {
@@ -58,4 +60,30 @@ test('installs and atomically replaces a bundled skill directory', async (t) => 
   assert.equal(replaced.replaced, true);
   assert.equal(await fs.readFile(path.join(target, 'SKILL.md'), 'utf8'), 'version two\n');
   await assert.rejects(fs.access(path.join(target, 'stale.txt')));
+});
+
+test('detects a current bundled skill across local and global candidates', async (t) => {
+  const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'vibetour-skill-match-'));
+  t.after(() => fs.rm(temporaryRoot, { recursive: true, force: true }));
+
+  const source = path.join(temporaryRoot, 'bundled');
+  const outdated = path.join(temporaryRoot, 'workspace-skill');
+  const current = path.join(temporaryRoot, 'user-skill');
+  const missing = path.join(temporaryRoot, 'missing-skill');
+  for (const directory of [source, outdated, current]) {
+    await fs.mkdir(path.join(directory, 'scripts'), { recursive: true });
+    await fs.writeFile(path.join(directory, 'SKILL.md'), 'same skill\n');
+    await fs.writeFile(path.join(directory, 'scripts', 'validate.py'), 'current\n');
+  }
+
+  await fs.writeFile(path.join(outdated, 'scripts', 'validate.py'), 'outdated\n');
+  await fs.writeFile(path.join(current, 'agent-cache.txt'), 'ignored extra file\n');
+
+  assert.equal(await skillMatchesBundled(source, missing), false);
+  assert.equal(await skillMatchesBundled(source, outdated), false);
+  assert.equal(await skillMatchesBundled(source, current), true);
+  assert.equal(
+    await findMatchingSkillInstallation(source, [missing, outdated, current]),
+    path.resolve(current)
+  );
 });

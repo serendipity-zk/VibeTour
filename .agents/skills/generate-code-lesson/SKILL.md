@@ -79,7 +79,7 @@ range:
 
 For every location:
 
-- Use a `/`-separated path relative to the workspace folder containing the lesson.
+- Use a `/`-separated path relative to the lesson root: the parent directory of the `.code-lessons` folder containing the lesson.
 - Keep the path inside the workspace; never start it with `/` or include `..`.
 - Use positive, 1-based, inclusive line numbers with `end_line >= start_line`.
 - Verify the file exists, the range fits the current checkout, and the selected code supports the explanation.
@@ -102,7 +102,7 @@ Do not turn a small recent change into a whole-repository tour. If the reliable 
 
 ## Inspect before writing
 
-1. Find the workspace root and inspect existing `.code-lessons/**/*.yaml` and `.code-lessons/**/*.yml`. Also respect custom `codeLessons.searchPaths` in workspace settings when present.
+1. Identify the project or repository root for the current agent task, then inspect existing `**/.code-lessons/**/*.yaml` and `**/.code-lessons/**/*.yml`. Default to that project root rather than creating `.code-lessons` inside ordinary source, component, package, submodule, or nested-repository directories. Discovery of an existing nested lesson is not a reason to move new lessons there. When the agent session is explicitly working on one repository inside a multi-repo workspace, that repository is the current project root. Also respect custom `codeLessons.searchPaths` in workspace settings when present.
 2. Check whether a lesson for the same objective already exists. Never overwrite an unrelated lesson that happens to have a similar filename or ID.
 3. Establish code evidence:
    - Start with the user's latest objective and files changed in the current conversation.
@@ -154,10 +154,12 @@ Completion state depends on stable lesson, chapter, and step IDs.
 
 ## Write and validate
 
-Write the lesson under the configured search path. With the default configuration, use:
+Write the lesson under the configured search path at the chosen project or repository root. With the default configuration, use:
 
-- `.code-lessons/walkthroughs/<lesson-id>.yaml` for temporary walkthroughs.
-- `.code-lessons/architecture/<lesson-id>.yaml` for permanent architecture lessons.
+- `<lesson-root>/.code-lessons/walkthroughs/<lesson-id>.yaml` for temporary walkthroughs.
+- `<lesson-root>/.code-lessons/architecture/<lesson-id>.yaml` for permanent architecture lessons.
+
+Keep `<lesson-root>` stable. Do not create nested `.code-lessons` directories merely because the selected code lives in a subdirectory, submodule, or nested repository. Choose a nested root only when that repository is itself the project the agent was asked to work on, such as a Claude Code session launched from one subrepository of a multi-repo workspace. All `file` values must be relative to this root.
 
 For a new file, follow an existing directory convention only when the workspace clearly and consistently uses one. Otherwise use the categorized paths above. A single older lesson stored directly under `.code-lessons/` does not require new lessons to use the flat layout, and this skill must not move existing files merely to normalize the layout.
 
@@ -165,7 +167,7 @@ Then run:
 
 ```bash
 python3 <skill-directory>/scripts/validate_lesson.py \
-  --workspace-root <workspace-root> <lesson-yaml>
+  --workspace-root <lesson-root> <lesson-yaml>
 ```
 
 Fix every reported error. After structural validation, manually inspect every primary and related range and confirm that it contains the code described by its title and explanation. Validation of line bounds alone is not enough.

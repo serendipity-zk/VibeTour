@@ -2,8 +2,9 @@
   "name": "vibe-tour",
   "displayName": "VibeTour",
   "description": "Coding-agent-authored walkthroughs that explain codebases and recent changes beside the source in VS Code.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
+  "license": "MIT",
   "publisher": "vibetour",
   "repository": {
     "type": "git",

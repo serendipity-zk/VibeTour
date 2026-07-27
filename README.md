@@ -236,6 +236,7 @@ The complete authoring contract and validator live in [`generate-code-lesson`](.
 - **Done** completes the current Step and advances automatically.
 - **Stop** closes the current comment and highlights while keeping Chapter progress.
 - **Reset** clears only that Chapter and leaves it stopped until Play is selected again.
+- Fully completed lessons move into a collapsed **Finished Lessons** folder that can be expanded for review or reset.
 - Completing a Chapter removes its comment and active highlights.
 - Completed ranges keep normal source text with a subdued background.
 - Related-code links open and highlight their target; **Back** returns to the lesson Step.

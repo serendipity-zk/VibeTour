@@ -24,16 +24,38 @@ class LessonTreeProvider {
     this.changed.fire();
   }
 
+  isLessonFinished(lesson) {
+    const steps = lesson.chapters.flatMap((chapter) => chapter.steps);
+    return steps.length > 0 && steps.every((step) => this.isComplete(step.key));
+  }
+
   getTreeItem(element) {
+    if (element.kind === 'finishedLessons') {
+      const finishedCount = this.getLessons()
+        .filter((lesson) => this.isLessonFinished(lesson))
+        .length;
+      const item = new vscode.TreeItem(
+        'Finished Lessons',
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.id = 'code-lessons-finished';
+      item.description = `${finishedCount}`;
+      item.iconPath = new vscode.ThemeIcon('archive');
+      item.contextValue = 'codeLessonFinishedFolder';
+      item.tooltip = 'Expand to review completed lessons or reset their chapters.';
+      return item;
+    }
+
     if (element.kind === 'lesson') {
       const steps = element.lesson.chapters.flatMap((chapter) => chapter.steps);
       const completed = steps.filter((step) => this.isComplete(step.key)).length;
+      const finished = steps.length > 0 && completed === steps.length;
       const item = new vscode.TreeItem(
         element.lesson.title,
         vscode.TreeItemCollapsibleState.Expanded
       );
       item.id = `code-lesson-${element.lesson.key}`;
-      item.description = `${completed}/${steps.length}`;
+      item.description = `${completed}/${steps.length}${finished ? ' · finished' : ''}`;
       item.iconPath = new vscode.ThemeIcon('book');
       item.contextValue = 'codeLesson';
       item.tooltip = new vscode.MarkdownString(
@@ -85,7 +107,25 @@ class LessonTreeProvider {
 
   getChildren(element) {
     if (!element) {
-      return this.getLessons().map((lesson) => ({ kind: 'lesson', lesson }));
+      const activeLessons = [];
+      const finishedLessons = [];
+      for (const lesson of this.getLessons()) {
+        if (this.isLessonFinished(lesson)) {
+          finishedLessons.push(lesson);
+        } else {
+          activeLessons.push(lesson);
+        }
+      }
+      const children = activeLessons.map((lesson) => ({ kind: 'lesson', lesson }));
+      if (finishedLessons.length > 0) {
+        children.push({ kind: 'finishedLessons' });
+      }
+      return children;
+    }
+    if (element.kind === 'finishedLessons') {
+      return this.getLessons()
+        .filter((lesson) => this.isLessonFinished(lesson))
+        .map((lesson) => ({ kind: 'lesson', lesson }));
     }
     if (element.kind === 'lesson') {
       return element.lesson.chapters.map((chapter) => ({
@@ -985,4 +1025,4 @@ async function activate(context) {
 
 function deactivate() {}
 
-module.exports = { activate, deactivate };
+module.exports = { LessonTreeProvider, activate, deactivate };

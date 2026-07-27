@@ -2,16 +2,27 @@ name: Build and release VibeTour
 
 on:
   workflow_dispatch:
+    inputs:
+      verify_marketplace_identity:
+        description: Resolve the Entra identity profile ID without publishing
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
 
-permissions:
-  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      artifact_name: ${{ steps.package.outputs.name }}
 
     steps:
       - name: Check out repository
@@ -72,4 +83,108 @@ jobs:
             gh release create "$GITHUB_REF_NAME" "$VSIX_PATH" \
               --title "$GITHUB_REF_NAME" \
               --generate-notes
+          fi
+
+  publish-marketplace:
+    name: Verify identity or publish to VS Code Marketplace
+    needs: build
+    if: github.ref_type == 'tag' || inputs.verify_marketplace_identity == true
+    runs-on: ubuntu-latest
+    environment: marketplace
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      VSIX_PATH: release/${{ needs.build.outputs.artifact_name }}.vsix
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install publishing tool
+        run: npm ci
+
+      - name: Download verified VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: release
+
+      - name: Sign in to Azure with OIDC
+        if: >-
+          env.AZURE_CLIENT_ID != '' &&
+          env.AZURE_TENANT_ID != '' &&
+          env.AZURE_SUBSCRIPTION_ID != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate Entra configuration
+        if: inputs.verify_marketplace_identity == true
+        shell: bash
+        run: |
+          if [[ -z "$AZURE_CLIENT_ID" ||
+                -z "$AZURE_TENANT_ID" ||
+                -z "$AZURE_SUBSCRIPTION_ID" ]]; then
+            echo "Add AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID to the marketplace environment." >&2
+            exit 1
+          fi
+
+      - name: Resolve Marketplace identity profile ID
+        if: >-
+          env.AZURE_CLIENT_ID != '' &&
+          env.AZURE_TENANT_ID != '' &&
+          env.AZURE_SUBSCRIPTION_ID != ''
+        id: marketplace-identity
+        shell: bash
+        run: |
+          profile_id="$(
+            az rest \
+              --method get \
+              --url "https://app.vssps.visualstudio.com/_apis/profile/profiles/me" \
+              --resource "499b84ac-1321-427f-aa17-267ca6975798" \
+              --query id \
+              --output tsv
+          )"
+          if [[ -z "$profile_id" ]]; then
+            echo "Unable to resolve the Marketplace identity profile ID." >&2
+            exit 1
+          fi
+          {
+            echo "### Marketplace identity profile ID"
+            echo
+            echo "\`$profile_id\`"
+            echo
+            echo "Add this identity to publisher \`vibetour\` with the Contributor role."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish verified VSIX
+        if: github.ref_type == 'tag'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        shell: bash
+        run: |
+          if [[ -n "$AZURE_CLIENT_ID" &&
+                -n "$AZURE_TENANT_ID" &&
+                -n "$AZURE_SUBSCRIPTION_ID" ]]; then
+            npx --no-install vsce publish \
+              --azure-credential \
+              --packagePath "$VSIX_PATH"
+          elif [[ -n "${VSCE_PAT:-}" ]]; then
+            npx --no-install vsce publish \
+              --packagePath "$VSIX_PATH"
+          else
+            echo "Configure Entra OIDC credentials or VSCE_PAT in the marketplace environment." >&2
+            exit 1
           fi

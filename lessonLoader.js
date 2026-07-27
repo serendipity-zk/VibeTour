@@ -295,34 +295,50 @@ async function parseLesson(uri, folder, diagnostics) {
   });
 
   if (yamlDocument.errors.length > 0) {
-    diagnostics.set(uri, yamlDocument.errors.map((error) =>
+    const errors = yamlDocument.errors.map((error) =>
       new vscode.Diagnostic(
         diagnosticRangeFromYamlError(error),
         error.message,
         vscode.DiagnosticSeverity.Error
       )
-    ));
-    return undefined;
+    );
+    diagnostics.set(uri, errors);
+    return { errors };
   }
 
   try {
     const lesson = normalizeLesson(yamlDocument.toJS({ maxAliasCount: 100 }), folder, uri);
     await validateLocations(lesson);
     diagnostics.delete(uri);
-    return lesson;
+    return { lesson, errors: [] };
   } catch (error) {
-    diagnostics.set(uri, [new vscode.Diagnostic(
+    const errors = [new vscode.Diagnostic(
       new vscode.Range(0, 0, 0, 1),
       error instanceof Error ? error.message : String(error),
       vscode.DiagnosticSeverity.Error
-    )]);
-    return undefined;
+    )];
+    diagnostics.set(uri, errors);
+    return { errors };
   }
+}
+
+function toInvalidLesson(uri, folder, errors) {
+  const relativePath = path.relative(folder.uri.fsPath, uri.fsPath).replaceAll('\\', '/');
+  return {
+    key: uri.toString(),
+    sourceUri: uri,
+    workspaceFolder: folder,
+    relativePath,
+    errorCount: errors.length,
+    message: errors[0]?.message || 'Invalid lesson file.',
+    firstRange: errors[0]?.range
+  };
 }
 
 async function loadLessons(diagnostics) {
   diagnostics.clear();
   const lessons = [];
+  const invalidLessons = [];
   const seenKeys = new Set();
   let errorCount = 0;
 
@@ -339,17 +355,21 @@ async function loadLessons(diagnostics) {
       left.toString().localeCompare(right.toString())
     );
     for (const uri of uris) {
-      const parsed = await parseLesson(uri, folder, diagnostics);
-      if (!parsed) {
+      const result = await parseLesson(uri, folder, diagnostics);
+      if (!result.lesson) {
+        invalidLessons.push(toInvalidLesson(uri, folder, result.errors));
         errorCount += 1;
         continue;
       }
+      const parsed = result.lesson;
       if (seenKeys.has(parsed.key)) {
-        diagnostics.set(uri, [new vscode.Diagnostic(
+        const errors = [new vscode.Diagnostic(
           new vscode.Range(0, 0, 0, 1),
           `Duplicate lesson id "${parsed.id}" under lesson root "${parsed.rootLabel}".`,
           vscode.DiagnosticSeverity.Error
-        )]);
+        )];
+        diagnostics.set(uri, errors);
+        invalidLessons.push(toInvalidLesson(uri, folder, errors));
         errorCount += 1;
         continue;
       }
@@ -358,7 +378,7 @@ async function loadLessons(diagnostics) {
     }
   }
 
-  return { lessons, errorCount };
+  return { lessons, invalidLessons, errorCount };
 }
 
 module.exports = {

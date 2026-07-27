@@ -51,6 +51,7 @@ Coding agents make changes quickly, but reviewing those changes can be just as c
 - Keep multi-line Markdown explanations expanded beside the relevant code.
 - Link concepts in an explanation directly to related locations across files.
 - Highlight the current, upcoming, completed, and related code ranges.
+- Stage only the Git changes inside the reviewed Step range.
 - Copy the current Step as YAML, ready to paste into Codex or Claude with a question.
 - Validate lesson structure, paths, IDs, and line ranges and report errors in Problems.
 - Reload lessons automatically when their YAML changes.
@@ -109,7 +110,8 @@ Then run **Extensions: Install from VSIX...** in the connected window and select
 4. VibeTour discovers the generated lesson automatically. Expand a Chapter and select **Play**.
 5. Move through the real code, follow related links, and mark each Step done.
 
-VibeTour does not modify source files. Progress is stored in VS Code workspace state.
+VibeTour does not edit source files. Progress is stored in VS Code workspace state;
+**Stage Reviewed Range** updates the Git index only when you explicitly select it.
 
 <a id="let-your-coding-agent-author-the-lesson"></a>
 
@@ -234,6 +236,10 @@ The complete authoring contract and validator live in [`generate-code-lesson`](.
 - **Play** starts or resumes a Chapter at its first unfinished Step.
 - **Previous** and **Next** move through the active Chapter.
 - **Done** completes the current Step and advances automatically.
+- **Stage Reviewed Range** stages only unstaged Git changes intersecting the current
+  Step's primary source range; changes elsewhere in the file stay unstaged. New
+  untracked files are prepared automatically, including in repositories without a
+  first commit.
 - **Stop** closes the current comment and highlights while keeping Chapter progress.
 - **Reset** clears only that Chapter and leaves it stopped until Play is selected again.
 - Fully completed lessons move into a collapsed **Finished Lessons** folder that can be expanded for review or reset.

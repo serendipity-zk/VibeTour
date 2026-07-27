@@ -82,6 +82,7 @@ test('groups completed lessons in a collapsed expandable folder', () => {
   const completed = new Set(['active-1', 'finished-1', 'finished-2']);
   const provider = new LessonTreeProvider(
     () => [activeLesson, finishedLesson],
+    () => [],
     (stepKey) => completed.has(stepKey),
     () => false
   );
@@ -115,6 +116,7 @@ test('moves a reset lesson back to the active root level', () => {
   const completed = new Set(['step-1', 'step-2']);
   const provider = new LessonTreeProvider(
     () => [completedLesson],
+    () => [],
     (stepKey) => completed.has(stepKey),
     () => false
   );
@@ -126,4 +128,44 @@ test('moves a reset lesson back to the active root level', () => {
   assert.equal(root.length, 1);
   assert.equal(root[0].kind, 'lesson');
   assert.equal(root[0].lesson, completedLesson);
+});
+
+test('groups invalid lesson files in a collapsed expandable folder', () => {
+  const invalidLesson = {
+    key: 'file:///workspace/.code-lessons/broken.yaml',
+    sourceUri: { fsPath: '/workspace/.code-lessons/broken.yaml' },
+    relativePath: '.code-lessons/broken.yaml',
+    errorCount: 2,
+    message: 'lesson.id must be a non-empty string.'
+  };
+  const provider = new LessonTreeProvider(
+    () => [],
+    () => [invalidLesson],
+    () => false,
+    () => false
+  );
+
+  const root = provider.getChildren();
+  assert.equal(root.length, 1);
+  assert.equal(root[0].kind, 'invalidLessons');
+
+  const folderItem = provider.getTreeItem(root[0]);
+  assert.equal(folderItem.label, 'Invalid Lessons');
+  assert.equal(
+    folderItem.collapsibleState,
+    fakeVscode.TreeItemCollapsibleState.Collapsed
+  );
+  assert.equal(folderItem.description, '1');
+  assert.equal(folderItem.iconPath.id, 'warning');
+
+  const invalidItems = provider.getChildren(root[0]);
+  assert.equal(invalidItems.length, 1);
+  assert.equal(invalidItems[0].invalidLesson, invalidLesson);
+
+  const invalidItem = provider.getTreeItem(invalidItems[0]);
+  assert.equal(invalidItem.label, 'broken.yaml');
+  assert.equal(invalidItem.description, '2 errors');
+  assert.equal(invalidItem.iconPath.id, 'error');
+  assert.equal(invalidItem.command.command, 'vibeTour.openInvalidLesson');
+  assert.equal(invalidItem.command.arguments[0], invalidLesson);
 });

@@ -3,6 +3,7 @@
 .vscode/**
 demo-workspace/**
 extension.js
+gitRangeStager.js
 lessonLoader.js
 skillInstaller.js
 node_modules/**

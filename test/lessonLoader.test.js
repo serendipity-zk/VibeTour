@@ -106,6 +106,7 @@ test('discovers, parses, and validates the demo lesson', async () => {
   const result = await loadLessons(diagnostics);
 
   assert.equal(result.errorCount, 0);
+  assert.deepEqual(result.invalidLessons, []);
   assert.equal(result.lessons.length, 1);
   assert.equal(result.lessons[0].title, 'Request Lifecycle');
   assert.equal(result.lessons[0].rootUri.fsPath, workspaceRoot);
@@ -218,4 +219,45 @@ test('rejects code paths that escape the lesson root', () => {
     () => normalizeLesson(data, folder, lessonUri),
     /must stay inside its lesson root/
   );
+});
+
+test('returns invalid lesson metadata alongside diagnostics', async (t) => {
+  const temporaryWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'vibetour-invalid-'));
+  const invalidPath = path.join(
+    temporaryWorkspace,
+    '.code-lessons/walkthroughs/broken.yaml'
+  );
+  fs.mkdirSync(path.dirname(invalidPath), { recursive: true });
+  fs.writeFileSync(invalidPath, [
+    'schema_version: 1',
+    'lesson:',
+    '  title: Missing id',
+    '  chapters: []',
+    ''
+  ].join('\n'));
+
+  const previousFolders = discovery.folders;
+  const previousUris = discovery.uris;
+  discovery.folders = [{
+    name: 'invalid-workspace',
+    uri: new Uri(temporaryWorkspace)
+  }];
+  discovery.uris = [new Uri(invalidPath)];
+  t.after(() => {
+    discovery.folders = previousFolders;
+    discovery.uris = previousUris;
+    fs.rmSync(temporaryWorkspace, { recursive: true, force: true });
+  });
+
+  const diagnostics = createDiagnostics();
+  const result = await loadLessons(diagnostics);
+
+  assert.equal(result.lessons.length, 0);
+  assert.equal(result.errorCount, 1);
+  assert.equal(result.invalidLessons.length, 1);
+  assert.equal(result.invalidLessons[0].relativePath, '.code-lessons/walkthroughs/broken.yaml');
+  assert.equal(result.invalidLessons[0].errorCount, 1);
+  assert.match(result.invalidLessons[0].message, /lesson\.id must be a non-empty string/);
+  assert.ok(result.invalidLessons[0].firstRange);
+  assert.equal(diagnostics.values.size, 1);
 });

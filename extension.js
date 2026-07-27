@@ -10,10 +10,17 @@ const {
   pathExists,
   skillMatchesBundled
 } = require('./skillInstaller');
+const {
+  getCachedDiff,
+  prepareRangeStaging,
+  removeIntentToAdd,
+  stageIntentToAddRange
+} = require('./gitRangeStager');
 
 class LessonTreeProvider {
-  constructor(getLessons, isComplete, isChapterActive) {
+  constructor(getLessons, getInvalidLessons, isComplete, isChapterActive) {
     this.getLessons = getLessons;
+    this.getInvalidLessons = getInvalidLessons;
     this.isComplete = isComplete;
     this.isChapterActive = isChapterActive;
     this.changed = new vscode.EventEmitter();
@@ -30,6 +37,43 @@ class LessonTreeProvider {
   }
 
   getTreeItem(element) {
+    if (element.kind === 'invalidLessons') {
+      const item = new vscode.TreeItem(
+        'Invalid Lessons',
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.id = 'code-lessons-invalid';
+      item.description = `${this.getInvalidLessons().length}`;
+      item.iconPath = new vscode.ThemeIcon('warning');
+      item.contextValue = 'codeLessonInvalidFolder';
+      item.tooltip = 'Expand to inspect lesson YAML files that could not be loaded.';
+      return item;
+    }
+
+    if (element.kind === 'invalidLesson') {
+      const invalidLesson = element.invalidLesson;
+      const item = new vscode.TreeItem(
+        path.basename(invalidLesson.sourceUri.fsPath),
+        vscode.TreeItemCollapsibleState.None
+      );
+      item.id = `code-lesson-invalid-${invalidLesson.key}`;
+      item.description = invalidLesson.errorCount === 1
+        ? '1 error'
+        : `${invalidLesson.errorCount} errors`;
+      item.iconPath = new vscode.ThemeIcon('error');
+      item.contextValue = 'codeLessonInvalid';
+      item.tooltip = new vscode.MarkdownString(
+        `**${invalidLesson.message}**\n\n` +
+        `Source: \`${invalidLesson.relativePath}\``
+      );
+      item.command = {
+        command: 'vibeTour.openInvalidLesson',
+        title: 'Open invalid lesson',
+        arguments: [invalidLesson]
+      };
+      return item;
+    }
+
     if (element.kind === 'finishedLessons') {
       const finishedCount = this.getLessons()
         .filter((lesson) => this.isLessonFinished(lesson))
@@ -117,10 +161,19 @@ class LessonTreeProvider {
         }
       }
       const children = activeLessons.map((lesson) => ({ kind: 'lesson', lesson }));
+      if (this.getInvalidLessons().length > 0) {
+        children.push({ kind: 'invalidLessons' });
+      }
       if (finishedLessons.length > 0) {
         children.push({ kind: 'finishedLessons' });
       }
       return children;
+    }
+    if (element.kind === 'invalidLessons') {
+      return this.getInvalidLessons().map((invalidLesson) => ({
+        kind: 'invalidLesson',
+        invalidLesson
+      }));
     }
     if (element.kind === 'finishedLessons') {
       return this.getLessons()
@@ -154,6 +207,7 @@ async function activate(context) {
   const codeLensChanged = new vscode.EventEmitter();
 
   let lessons = [];
+  let invalidLessons = [];
   let activeChapterKey;
   let currentStepKey;
   let currentThread;
@@ -271,6 +325,7 @@ async function activate(context) {
 
   const treeProvider = new LessonTreeProvider(
     () => lessons,
+    () => invalidLessons,
     (stepKey) => completed.has(stepKey),
     (chapterKey) => chapterKey === activeChapterKey
   );
@@ -588,6 +643,152 @@ async function activate(context) {
     vscode.window.showInformationMessage(`Copied step YAML: ${step.title}`);
   };
 
+  const stageReviewedRange = async () => {
+    const step = getStep(currentStepKey);
+    const chapter = getChapterForStep(currentStepKey);
+    const uri = step && getUriForLocation(step);
+    if (!step || !chapter || !uri || chapter.key !== activeChapterKey) {
+      vscode.window.showInformationMessage(
+        'Start a chapter before staging a reviewed range.'
+      );
+      return;
+    }
+
+    let document;
+    try {
+      document = await vscode.workspace.openTextDocument(uri);
+    } catch {
+      vscode.window.showErrorMessage(`Lesson location is missing: ${step.file}`);
+      return;
+    }
+
+    const gitExtension = vscode.extensions.getExtension('vscode.git');
+    if (!gitExtension) {
+      vscode.window.showErrorMessage(
+        "Unable to stage the reviewed range because VS Code's built-in Git extension is unavailable."
+      );
+      return;
+    }
+
+    let gitApi;
+    try {
+      const gitExports = gitExtension.isActive
+        ? gitExtension.exports
+        : await gitExtension.activate();
+      if (!gitExports.enabled) {
+        vscode.window.showErrorMessage(
+          "Enable VS Code's built-in Git extension before staging a reviewed range."
+        );
+        return;
+      }
+      gitApi = gitExports.getAPI(1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Unable to access VS Code Git: ${message}`);
+      return;
+    }
+
+    const repository = gitApi.getRepository(uri);
+    if (!repository || uri.scheme !== 'file' || repository.rootUri.scheme !== 'file') {
+      vscode.window.showErrorMessage(
+        'The reviewed file is not inside an open local Git repository.'
+      );
+      return;
+    }
+
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      preserveFocus: false
+    });
+    const previousSelections = editor.selections;
+    const range = toRange(document, step);
+    editor.selections = [new vscode.Selection(range.start, range.end)];
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+
+    let stagingState;
+    try {
+      stagingState = await prepareRangeStaging(
+        gitApi.git.path,
+        repository.rootUri.fsPath,
+        uri.fsPath
+      );
+      await repository.status();
+
+      const beforeDiff = await getCachedDiff(
+        gitApi.git.path,
+        repository.rootUri.fsPath,
+        stagingState.relativePath
+      );
+      let afterDiff = beforeDiff;
+      if (stagingState.addedIntentToAdd) {
+        await stageIntentToAddRange(
+          gitApi.git.path,
+          repository.rootUri.fsPath,
+          stagingState.relativePath,
+          document.getText(),
+          step.startLine,
+          step.endLine
+        );
+        await repository.status();
+        afterDiff = await getCachedDiff(
+          gitApi.git.path,
+          repository.rootUri.fsPath,
+          stagingState.relativePath
+        );
+      } else {
+        editor.selections = [new vscode.Selection(range.start, range.end)];
+        await vscode.commands.executeCommand('git.stageSelectedRanges');
+        await repository.status();
+        afterDiff = await getCachedDiff(
+          gitApi.git.path,
+          repository.rootUri.fsPath,
+          stagingState.relativePath
+        );
+      }
+
+      if (afterDiff === beforeDiff) {
+        if (stagingState.addedIntentToAdd) {
+          await removeIntentToAdd(
+            gitApi.git.path,
+            repository.rootUri.fsPath,
+            stagingState.relativePath
+          );
+          await repository.status();
+        }
+        vscode.window.showWarningMessage(
+          `No unstaged Git changes were found inside ${step.file}:${step.startLine}-${step.endLine}.`
+        );
+        return;
+      }
+
+      vscode.window.showInformationMessage(
+        `Staged reviewed range: ${step.file}:${step.startLine}-${step.endLine}`
+      );
+    } catch (error) {
+      if (stagingState?.addedIntentToAdd) {
+        try {
+          await removeIntentToAdd(
+            gitApi.git.path,
+            repository.rootUri.fsPath,
+            stagingState.relativePath
+          );
+          await repository.status();
+        } catch {
+          // Preserve the original staging error.
+        }
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(
+        `Unable to stage the reviewed range: ${message}`
+      );
+    } finally {
+      if (vscode.window.activeTextEditor === editor) {
+        editor.selections = previousSelections;
+      }
+      refreshDecorations();
+    }
+  };
+
   const commentFor = (step) => {
     const chapter = getChapter(step.chapterKey);
     const index = chapter.steps.findIndex((candidate) => candidate.key === step.key);
@@ -747,15 +948,14 @@ async function activate(context) {
   const reloadLessons = async (notify = false) => {
     const result = await loadLessons(diagnostics);
     lessons = result.lessons;
+    invalidLessons = result.invalidLessons;
     await vscode.commands.executeCommand(
       'setContext',
       'vibeTour.hasLessonErrors',
       result.errorCount > 0
     );
     treeProvider.refresh();
-    treeView.message = lessons.length > 0 && result.errorCount > 0
-      ? `${result.errorCount} invalid lesson file(s); see Problems.`
-      : undefined;
+    treeView.message = undefined;
 
     const activeChapter = getChapter(activeChapterKey);
     if (!activeChapter) {
@@ -846,6 +1046,16 @@ async function activate(context) {
     vscode.commands.registerCommand('vibeTour.showLessons', () =>
       vscode.commands.executeCommand('vibe-tour-lessons.focus')
     ),
+    vscode.commands.registerCommand('vibeTour.openInvalidLesson', async (invalidLesson) => {
+      if (!invalidLesson?.sourceUri) {
+        return;
+      }
+      const document = await vscode.workspace.openTextDocument(invalidLesson.sourceUri);
+      await vscode.window.showTextDocument(document, {
+        preview: false,
+        selection: invalidLesson.firstRange
+      });
+    }),
     vscode.commands.registerCommand('vibeTour.deleteLesson', async (argument) => {
       const lesson = lessonFromArgument(argument);
       if (!lesson) {
@@ -890,6 +1100,7 @@ async function activate(context) {
     }),
     vscode.commands.registerCommand('vibeTour.previous', () => showAdjacent(-1)),
     vscode.commands.registerCommand('vibeTour.next', () => showAdjacent(1)),
+    vscode.commands.registerCommand('vibeTour.stageReviewedRange', stageReviewedRange),
     vscode.commands.registerCommand('vibeTour.copyStepContext', copyStepContext),
     vscode.commands.registerCommand('vibeTour.completeCurrent', async () => {
       const step = getStep(currentStepKey);

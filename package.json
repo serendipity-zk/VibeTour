@@ -39,6 +39,7 @@
     "onCommand:vibeTour.resetChapter",
     "onCommand:vibeTour.openStep",
     "onCommand:vibeTour.completeCurrent",
+    "onCommand:vibeTour.stageReviewedRange",
     "onCommand:vibeTour.copyStepContext",
     "onCommand:vibeTour.previous",
     "onCommand:vibeTour.next",
@@ -47,6 +48,7 @@
     "onCommand:vibeTour.refreshLessons",
     "onCommand:vibeTour.installAuthoringSkill",
     "onCommand:vibeTour.showLessons",
+    "onCommand:vibeTour.openInvalidLesson",
     "onCommand:vibeTour.deleteLesson"
   ],
   "main": "./dist/extension.js",
@@ -75,6 +77,11 @@
         "command": "vibeTour.completeCurrent",
         "title": "VibeTour: Mark Current Step Done",
         "icon": "$(check)"
+      },
+      {
+        "command": "vibeTour.stageReviewedRange",
+        "title": "VibeTour: Stage Reviewed Range",
+        "icon": "$(diff-added)"
       },
       {
         "command": "vibeTour.copyStepContext",
@@ -112,6 +119,10 @@
       {
         "command": "vibeTour.showLessons",
         "title": "VibeTour: Show Lessons"
+      },
+      {
+        "command": "vibeTour.openInvalidLesson",
+        "title": "VibeTour: Open Invalid Lesson"
       },
       {
         "command": "vibeTour.deleteLesson",
@@ -176,19 +187,24 @@
           "group": "inline@3"
         },
         {
-          "command": "vibeTour.stopChapter",
+          "command": "vibeTour.stageReviewedRange",
           "when": "commentController == vibeTour.comments",
           "group": "inline@4"
         },
         {
-          "command": "vibeTour.copyStepContext",
+          "command": "vibeTour.stopChapter",
           "when": "commentController == vibeTour.comments",
           "group": "inline@5"
         },
         {
-          "command": "vibeTour.resetChapter",
+          "command": "vibeTour.copyStepContext",
           "when": "commentController == vibeTour.comments",
           "group": "inline@6"
+        },
+        {
+          "command": "vibeTour.resetChapter",
+          "when": "commentController == vibeTour.comments",
+          "group": "inline@7"
         }
       ],
       "view/item/context": [
@@ -255,7 +271,7 @@
   },
   "scripts": {
     "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
-    "check": "node --check extension.js && node --check lessonLoader.js && node --check skillInstaller.js",
+    "check": "node --check extension.js && node --check lessonLoader.js && node --check skillInstaller.js && node --check gitRangeStager.js",
     "test": "node --test test/*.test.js",
     "vscode:prepublish": "npm run build",
     "package": "vsce package --no-dependencies"

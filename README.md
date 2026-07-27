@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="#whats-new">What's new</a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#let-your-coding-agent-author-the-lesson">Coding agent skill</a> ·
@@ -28,6 +29,21 @@
 VibeTour lets Codex, Claude Code, and other skill-compatible coding agents explain code as an interactive walkthrough inside VS Code. Ask an agent to teach you an unfamiliar subsystem, trace an execution path, or explain the work it just completed. The agent uses the current checkout and conversation to select focused source ranges, connect related files, and validate the lesson before VibeTour presents it.
 
 > 💡 **Just ask for an explanation in natural language. You do not have to write lesson YAML by hand.**
+
+<a id="whats-new"></a>
+
+## 🆕 What's new in 0.0.6
+
+- **Review and stage with confidence.** Stage only the Git changes inside the
+  current Step, including selected ranges from fresh untracked files.
+- **Keep the lesson library focused.** Completed lessons move into a collapsed
+  **Finished Lessons** section, while broken YAML appears under **Invalid
+  Lessons** with direct access to its first error.
+- **Get more complete agent-authored walkthroughs.** The bundled skill now
+  audits staged, unstaged, untracked, and committed changes so meaningful
+  in-scope files and integration paths are not silently omitted.
+
+See the complete release history in the [changelog](CHANGELOG.md).
 
 ## 🎯 Motivation
 
@@ -255,7 +271,10 @@ The complete authoring contract and validator live in [`generate-code-lesson`](.
 | `codeLessons.searchPaths` | `["**/.code-lessons/**/*.yaml", "**/.code-lessons/**/*.yml"]` | Glob patterns searched in each workspace folder, including nested repository roots. |
 | `codeLessons.autoReload` | `true` | Reload lessons when matching YAML files are created, changed, or deleted. |
 
-Use the refresh icon in the VibeTour view to reload manually. Invalid lessons remain out of the tree and appear as diagnostics in the Problems panel.
+Use the refresh icon in the VibeTour view to reload manually. Invalid YAML is
+grouped under the collapsed **Invalid Lessons** section; selecting an entry
+opens the file at its first diagnostic, and every error also remains available
+in the Problems panel.
 
 ## 🛠️ Development
 
@@ -276,9 +295,16 @@ npm run package
 
 ## 🚢 Releases
 
-The GitHub Actions workflow runs checks and tests, builds the bundle, and uploads a VSIX artifact. A tag matching `v<package.json version>` creates a GitHub Release and attaches the prebuilt VSIX; for example, package version `0.0.3` uses tag `v0.0.3`.
+The GitHub Actions workflow runs checks and tests, builds one versioned VSIX,
+attaches that exact artifact to a GitHub Release, and publishes it to the VS
+Code Marketplace through short-lived Microsoft Entra/OIDC credentials. A tag
+must match `v<package.json version>`; for example, package version `0.0.6` uses
+tag `v0.0.6`.
 
-Manual workflow runs build the same downloadable artifact without creating a Release.
+Manual workflow runs can build the same downloadable artifact or verify the
+Marketplace publishing identity without creating a Release. See
+[CHANGELOG.md](CHANGELOG.md) for version history and
+[the maintainer release guide](.github/RELEASING.md) for the release procedure.
 
 ## 💬 Support
 

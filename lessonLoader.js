@@ -138,7 +138,7 @@ function normalizeLesson(data, folder, sourceUri) {
   const rawLesson = requireObject(root.lesson, 'lesson');
   const lessonId = requireId(rawLesson.id, 'lesson.id');
   const lessonRoot = getLessonRoot(folder, sourceUri);
-  const lessonKey = `${lessonRoot.uri.toString()}::${lessonId}`;
+  const lessonKey = `${decodeURIComponent(lessonRoot.uri.toString())}::${lessonId}`;
   const rawChapters = requireArray(rawLesson.chapters, 'lesson.chapters');
   const chapterIds = new Set();
   const stepIds = new Set();
